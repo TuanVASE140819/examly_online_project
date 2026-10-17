@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  TEACHER
+  STUDENT
+  ADMIN
+}
+
+enum ExamStatus {
+  DRAFT
+  WAITING
+  SCHEDULED
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+enum ParticipantStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  IN_PROGRESS
+  SUBMITTED
+  ABSENT
+}
+
+enum SubmitReason {
+  MANUAL
+  TIMEOUT
+}
+
+model User {
+  id           String        @id @default(uuid()) @db.Uuid
+  email        String        @unique
+  passwordHash String
+  displayName  String
+  role         UserRole      @default(STUDENT)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  ownedExams   Exam[]        @relation("ExamOwner")
+  approved     Participant[] @relation("ApprovedBy")
+
+  @@map("users")
+}
+
+model Exam {
+  id              String            @id @default(uuid()) @db.Uuid
+  ownerId         String            @db.Uuid
+  owner           User              @relation("ExamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  joinCode        String            @default("")
+  joinCodeHash    String            @unique
+  status          ExamStatus        @default(WAITING)
+  durationSeconds Int
+  startsAt        DateTime?
+  endsAt          DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  questions       Question[]
+  participants    Participant[]
+  submissions     Submission[]
+  events          ProctoringEvent[]
+  auditLogs       AuditLog[]
+
+  @@index([ownerId, status])
+  @@map("exams")
+}
+
+model Question {
+  id        String   @id @default(uuid()) @db.Uuid
+  examId    String   @db.Uuid
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  topic     String   @default("Tổng quát")
+  prompt    String
+  position  Int
+  points    Float    @default(1.0)
+  createdAt DateTime @default(now())
+  options   Option[]
+  answers   Answer[]
+
+  @@unique([examId, position])
+  @@index([examId])
+  @@map("questions")
+}
+
+model Option {
+  id         String   @id @default(uuid()) @db.Uuid
+  questionId String   @db.Uuid
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  isCorrect  Boolean  @default(false)
+  position   Int
+  answers    Answer[]
+
+  @@unique([questionId, position])
+  @@map("options")
+}
+
+model Participant {
+  id           String            @id @default(uuid()) @db.Uuid
+  examId       String            @db.Uuid
+  exam         Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+  userId       String?           @db.Uuid
+  displayName  String
+  className    String
+  status       ParticipantStatus @default(PENDING)
+  approvedById String?           @db.Uuid
+  approvedBy   User?             @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+  joinedAt     DateTime          @default(now())
+  answers      Answer[]
+  submission   Submission?
+  events       ProctoringEvent[]
+
+  @@unique([examId, userId])
+  @@index([examId, status])
+  @@index([examId, joinedAt])
+  @@map("participants")
+}
+
+model Answer {
+  id               String      @id @default(uuid()) @db.Uuid
+  participantId    String      @db.Uuid
+  participant      Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  questionId       String      @db.Uuid
+  question         Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOptionId String?     @db.Uuid
+  selectedOption   Option?     @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
+  savedAt          DateTime    @updatedAt
+
+  @@unique([participantId, questionId])
+  @@map("answers")
+}
+
+model Submission {
+  id             String       @id @default(uuid()) @db.Uuid
+  participantId  String       @unique @db.Uuid
+  participant    Participant  @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  examId         String       @db.Uuid
+  exam           Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  startedAt      DateTime     @default(now())
+  submittedAt    DateTime     @default(now())
+  reason         SubmitReason @default(MANUAL)
+  score          Float?
+  maxScore       Float        @default(10.0)
+  correctCount   Int          @default(0)
+  totalQuestions Int          @default(0)
+  gradedAt       DateTime?
+
+  @@index([examId, submittedAt])
+  @@map("submissions")
+}
+
+model ProctoringEvent {
+  id            String       @id @default(uuid()) @db.Uuid
+  examId        String       @db.Uuid
+  exam          Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  participantId String?      @db.Uuid
+  participant   Participant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  eventType     String
+  occurredAt    DateTime     @default(now())
+  metadata      Json?
+
+  @@index([examId, occurredAt])
+  @@index([participantId])
+  @@map("proctoring_events")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  examId    String?  @db.Uuid
+  exam      Exam?    @relation(fields: [examId], references: [id], onDelete: SetNull)
+  actorId   String?
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([examId, createdAt])
+  @@map("audit_logs")
+}
