@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto'
 import { ExamStatus, ParticipantStatus, UserRole } from '@prisma/client'
 import { prisma } from '../../lib/prisma.js'
 import { AppError } from '../../middleware/errorHandler.js'
-import type { CreateQuestionInput } from './questions.schemas.js'
+import type { CreateQuestionInput, ImportQuestionsInput } from './questions.schemas.js'
 
 export class QuestionsService {
   // Dành cho giáo viên: Trả về đầy đủ câu hỏi và cờ isCorrect
@@ -144,6 +145,75 @@ export class QuestionsService {
     })
 
     return { question }
+  }
+
+  // Nhập hàng loạt câu hỏi (từ file) trong một transaction: thêm vào cuối đề hoặc thay thế toàn bộ đề
+  static async importQuestions(userId: string, role: UserRole, examId: string, data: ImportQuestionsInput) {
+    const exam = await prisma.exam.findUnique({ where: { id: examId } })
+    if (!exam) {
+      throw new AppError(404, 'EXAM_NOT_FOUND', 'Không tìm thấy kỳ thi.')
+    }
+
+    if (role !== UserRole.ADMIN && exam.ownerId !== userId) {
+      throw new AppError(403, 'FORBIDDEN', 'Bạn không có quyền sửa câu hỏi của kỳ thi này.')
+    }
+
+    if (exam.status !== ExamStatus.WAITING && exam.status !== ExamStatus.DRAFT) {
+      throw new AppError(409, 'INVALID_EXAM_STATE', 'Không thể nhập câu hỏi khi kỳ thi đã bắt đầu hoặc kết thúc.')
+    }
+
+    const questions = await prisma.$transaction(async (tx) => {
+      if (data.replace) {
+        await tx.question.deleteMany({ where: { examId } })
+      }
+
+      const max = data.replace
+        ? null
+        : await tx.question.aggregate({
+            where: { examId },
+            _max: { position: true },
+          })
+      const startPosition = (max?._max.position ?? 0) + 1
+
+      // Tạo sẵn id để ghi câu hỏi và phương án bằng 2 lệnh createMany thay vì hàng trăm lệnh lẻ
+      const rows = data.questions.map((q, idx) => ({
+        id: randomUUID(),
+        examId,
+        topic: q.topic,
+        prompt: q.prompt,
+        points: q.points,
+        position: startPosition + idx,
+      }))
+
+      await tx.question.createMany({ data: rows })
+      await tx.option.createMany({
+        data: data.questions.flatMap((q, idx) =>
+          q.options.map((opt, optIdx) => ({
+            questionId: rows[idx]!.id,
+            text: opt.text,
+            isCorrect: opt.isCorrect,
+            position: optIdx,
+          }))
+        ),
+      })
+
+      return tx.question.findMany({
+        where: { id: { in: rows.map((r) => r.id) } },
+        orderBy: { position: 'asc' },
+        include: { options: { orderBy: { position: 'asc' } } },
+      })
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        examId,
+        actorId: userId,
+        action: 'QUESTIONS_IMPORTED',
+        metadata: { count: questions.length, replace: data.replace },
+      },
+    })
+
+    return { questions, imported: questions.length, replaced: data.replace }
   }
 
   static async deleteQuestion(userId: string, role: UserRole, examId: string, questionId: string) {

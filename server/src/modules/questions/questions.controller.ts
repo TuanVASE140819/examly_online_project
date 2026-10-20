@@ -34,6 +34,20 @@ export class QuestionsController {
     }
   }
 
+  static async importQuestions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await QuestionsService.importQuestions(
+        req.user!.sub,
+        req.user!.role,
+        req.params['examId']!,
+        req.body
+      )
+      return res.status(201).json(result)
+    } catch (err) {
+      next(err)
+    }
+  }
+
   static async deleteQuestion(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await QuestionsService.deleteQuestion(

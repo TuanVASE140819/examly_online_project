@@ -79,19 +79,28 @@ npm run dev
 
 ---
 
-## 3. Tài khoản Demo & Dữ liệu Mẫu
+## 3. Tài khoản & Dữ liệu Mẫu
 
-Sau khi chạy lệnh `npm run db:seed`:
-- **Tài khoản Giáo viên:** `teacher@examly.vn`
-- **Mật khẩu:** `Password123@`
-- **Mã phòng thi mẫu:** `EXAM-101`
-- **Đề thi mẫu:** Gồm 5 câu hỏi trắc nghiệm chủ đề HTML & CSS, JavaScript, ReactJS, TypeScript và Web Network (thang điểm 10).
+Mọi người dùng phải **đăng nhập** trước; vai trò (Giáo viên / Học sinh) được xác định từ tài khoản. Có thể tự tạo tài khoản ở tab **Đăng ký** trên màn hình đăng nhập (chọn vai trò Giáo viên hoặc Học sinh).
+
+Sau khi chạy lệnh `npm run db:seed` sẽ có sẵn (mật khẩu chung `Password123@`):
+- **Giáo viên:** `teacher@examly.vn`
+- **Học sinh:** `student@examly.vn`, `student2@examly.vn`
+- **Phòng thi mẫu:** `EXAM-101` (thuộc `teacher@examly.vn`) gồm 5 câu hỏi trắc nghiệm về HTML & CSS, JavaScript, ReactJS, TypeScript và Web (thang điểm 10).
+
+### Nhập đề thi từ file
+
+Giáo viên bấm **Nhập từ file** (khung "Đề thi") hoặc **Tạo & nhập đề từ file** khi tạo phòng. File được đọc trên trình duyệt để xem trước và báo lỗi theo từng dòng/câu, chỉ lưu khi bấm nhập. Có thể chọn *thêm vào cuối đề* hoặc *thay thế toàn bộ đề*. Tối đa 300 câu mỗi lần, mỗi câu 2–6 phương án và đúng 1 đáp án đúng.
+
+- **Excel (.xlsx) / CSV:** dòng tiêu đề gồm `Chủ đề` (không bắt buộc), `Câu hỏi`, `A`, `B`, `C`, `D` (thêm `E`, `F` nếu cần), `Đáp án đúng` (chữ cái A–F). CSV lưu từ Excel tiếng Việt (bảng mã Windows-1258, dấu `;`) cũng đọc được.
+- **Word (.docx) / TXT:** mỗi câu bắt đầu bằng `Câu 1:`, phương án `A.` `B.`... (có thể nhiều phương án trên một dòng). Đáp án đúng ghi bằng dòng `Đáp án: B`, dấu `*` trước phương án, gạch chân/in đậm phương án (Word), hoặc bảng đáp án cuối file `Đáp án: 1A 2C 3B`. Hỗ trợ cả danh sách đánh số tự động của Word.
+- File mẫu Excel và TXT tải được ngay trong hộp thoại nhập đề. Chưa hỗ trợ định dạng cũ `.xls`/`.doc` và hình ảnh trong câu hỏi.
 
 ---
 
 ## 4. Kiểm thử Tự động (Automated Test Suite)
 
-Dự án bao gồm bộ test toàn diện 17 kiểm thử bao phủ toàn bộ 15 kịch bản:
+Dự án bao gồm 33 kiểm thử, bao phủ các kịch bản:
 - Đăng nhập hợp lệ và không hợp lệ.
 - Student không thể tạo kỳ thi (RBAC).
 - Teacher không thể xem/sửa kỳ thi của người khác.
@@ -106,8 +115,12 @@ Dự án bao gồm bộ test toàn diện 17 kiểm thử bao phủ toàn bộ 1
 - Từ chối lưu bài khi kỳ thi đã hết giờ (TIMEOUT).
 - Chấm điểm nguyên tử server-side bằng Transaction ($transaction).
 - Giám sát chuyển tab (Proctoring event `TAB_HIDDEN`).
+- Phải đăng nhập tài khoản học sinh mới tham gia được phòng thi; đăng ký không cho phép tự tạo tài khoản Admin.
+- Thí sinh chưa được duyệt hoặc kỳ thi chưa bắt đầu thì không nộp được bài.
+- Kết thúc kỳ thi (thủ công hoặc tự động khi hết giờ) sẽ tự nộp bài cho thí sinh đang làm và đánh dấu vắng thí sinh chưa vào thi.
+- Nhập đề từ file: thêm vào cuối đề / thay thế đề, bắt buộc đúng 1 đáp án đúng mỗi câu, khóa khi kỳ thi đã bắt đầu, chặn giáo viên khác.
 
-Chạy kiểm thử:
+Chạy kiểm thử (vitest 5 yêu cầu **Node.js ≥ 22.12**):
 ```bash
 cd server
 npm test
@@ -118,16 +131,21 @@ npm test
 ## 5. Hướng dẫn Thử nghiệm Đồng bộ Realtime (Hai Trình duyệt)
 
 1. **Trình duyệt A (Giáo viên):**
-   - Vào `http://localhost:5173` ở chế độ **Giáo viên**.
-   - Quan sát mã phòng (ví dụ `EXAM-101`) hoặc nhấn **Tạo phòng thi mới**.
-2. **Trình duyệt B (Học sinh - Có thể dùng tab Ẩn danh hoặc máy khác trong mạng LAN):**
-   - Vào `http://localhost:5173` ở chế độ **Học sinh**.
-   - Nhập Họ tên, Lớp học và Mã phòng thi vừa tạo, bấm **Gửi yêu cầu tham gia**.
+   - Vào `http://localhost:5173`, đăng nhập `teacher@examly.vn`.
+   - Dùng phòng `EXAM-101` có sẵn, hoặc nhấn **Tạo phòng thi mới** rồi **Thêm câu hỏi** (chọn đáp án đúng cho từng câu).
+2. **Trình duyệt B (Học sinh - tab Ẩn danh hoặc máy khác trong mạng LAN):**
+   - Vào `http://localhost:5173`, đăng nhập `student@examly.vn` (hoặc tự đăng ký tài khoản học sinh).
+   - Nhập Lớp và Mã phòng thi, bấm **Gửi yêu cầu tham gia**. Họ tên lấy theo tài khoản.
 3. **Phê duyệt thời gian thực (Socket.IO):**
-   - Màn hình Giáo viên (Trình duyệt A) sẽ **tức thời xuất hiện thông báo** và tên học sinh trong bảng chờ duyệt mà không cần tải lại trang.
-   - Giáo viên nhấn **Duyệt**.
-   - Ngay lập tức, màn hình Học sinh (Trình duyệt B) tự động chuyển sang trạng thái **Đã được duyệt** và nút **Vào làm bài thi** phát sáng.
-4. **Làm bài & Giám sát:**
-   - Học sinh bắt đầu làm bài trắc nghiệm, mỗi câu chọn đáp án được **Autosave** lên máy chủ.
-   - Thử chuyển tab hoặc ẩn trình duyệt: Cảnh báo giám sát xuất hiện và cập nhật số lượt rời trang trên màn hình Giáo viên.
-   - Bấm **Nộp bài**: Máy chủ tự động chấm điểm và trả về kết quả chính thức.
+   - Màn hình Giáo viên **tức thời hiện yêu cầu** trong bảng thí sinh và mục Hoạt động gần đây.
+   - Giáo viên nhấn **Duyệt** → màn hình Học sinh chuyển sang **Bạn đã được duyệt!**.
+4. **Bắt đầu kỳ thi:**
+   - Giáo viên nhấn **Bắt đầu kỳ thi** (cần ít nhất 1 câu hỏi). Đề thi bị khóa, đồng hồ đếm ngược chạy theo máy chủ.
+   - Màn hình Học sinh hiện **Kỳ thi đã bắt đầu!** và nút **Vào làm bài thi**.
+5. **Làm bài & Giám sát:**
+   - Mỗi lần chọn đáp án được **Autosave** lên máy chủ; tải lại trang (F5) vẫn quay về đúng bài với đáp án đã chọn.
+   - Chuyển tab hoặc ẩn trình duyệt: số lượt rời trang cập nhật ngay trên màn hình Giáo viên.
+   - Bấm **Nộp bài**: máy chủ chấm điểm và trả về kết quả chính thức; Giáo viên thấy điểm ngay trong bảng.
+6. **Kết thúc:**
+   - Giáo viên nhấn **Kết thúc kỳ thi**, hoặc máy chủ **tự động kết thúc khi hết giờ** (kể cả sau khi khởi động lại server).
+   - Bài đang làm dở được tự động nộp và chấm điểm; thí sinh đã duyệt nhưng chưa vào thi bị đánh dấu **Vắng thi**.

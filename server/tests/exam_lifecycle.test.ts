@@ -163,13 +163,50 @@ describe('Kịch bản 9, 10, 11, 12, 14, 15: Vòng đời Bài thi, Autosave, C
     expect(res.body.error).toBe('EXAM_TIMEOUT')
   })
 
+  it('12b. Thí sinh chưa được duyệt không thể nộp bài: Trả về HTTP 403 NOT_APPROVED', async () => {
+    vi.mocked(prisma.participant.findUnique).mockResolvedValueOnce({
+      id: participant1Id,
+      examId,
+      status: ParticipantStatus.PENDING,
+      submission: null,
+      exam: { id: examId, status: ExamStatus.ACTIVE },
+    } as any)
+
+    const res = await request(app)
+      .post('/api/v1/submissions/current/submit')
+      .set('Authorization', `Bearer ${student1Token}`)
+      .send({ reason: 'MANUAL' })
+
+    expect(res.status).toBe(403)
+    expect(res.body.error).toBe('NOT_APPROVED')
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('12c. Không thể nộp bài khi kỳ thi chưa bắt đầu: Trả về HTTP 409 EXAM_NOT_ACTIVE', async () => {
+    vi.mocked(prisma.participant.findUnique).mockResolvedValueOnce({
+      id: participant1Id,
+      examId,
+      status: ParticipantStatus.APPROVED,
+      submission: null,
+      exam: { id: examId, status: ExamStatus.WAITING },
+    } as any)
+
+    const res = await request(app)
+      .post('/api/v1/submissions/current/submit')
+      .set('Authorization', `Bearer ${student1Token}`)
+      .send({ reason: 'MANUAL' })
+
+    expect(res.status).toBe(409)
+    expect(res.body.error).toBe('EXAM_NOT_ACTIVE')
+  })
+
   it('12. Chấm điểm phía server: 4/5 câu đúng được quy đổi chính xác thành 8.0/10', async () => {
     vi.mocked(prisma.participant.findUnique).mockResolvedValueOnce({
       id: participant1Id,
       examId,
       status: ParticipantStatus.IN_PROGRESS,
       submission: null,
-      exam: { id: examId },
+      exam: { id: examId, status: ExamStatus.ACTIVE },
     } as any)
 
     // Giả lập transaction chấm điểm

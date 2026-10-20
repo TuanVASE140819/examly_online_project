@@ -46,6 +46,29 @@ describe('Kịch bản 6, 7, 13: Quy trình Phê duyệt Thí sinh & Quyền tru
     vi.resetAllMocks()
   })
 
+  it('6.3. Không thể đổi trạng thái thí sinh đã nộp bài: Trả về HTTP 409 ALREADY_SUBMITTED', async () => {
+    vi.mocked(prisma.exam.findUnique).mockResolvedValueOnce({
+      id: examId,
+      ownerId: teacherId,
+      status: ExamStatus.ACTIVE,
+    } as any)
+
+    vi.mocked(prisma.participant.findFirst).mockResolvedValueOnce({
+      id: participantId,
+      examId,
+      status: ParticipantStatus.SUBMITTED,
+    } as any)
+
+    const res = await request(app)
+      .post(`/api/v1/exams/${examId}/participants/${participantId}/decision`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ decision: 'PENDING' })
+
+    expect(res.status).toBe(409)
+    expect(res.body.error).toBe('ALREADY_SUBMITTED')
+    expect(prisma.participant.update).not.toHaveBeenCalled()
+  })
+
   it('6.1. Giáo viên duyệt thí sinh: Cập nhật status thành APPROVED', async () => {
     vi.mocked(prisma.exam.findUnique).mockResolvedValueOnce({
       id: examId,

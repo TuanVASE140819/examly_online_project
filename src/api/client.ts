@@ -1,24 +1,93 @@
-import type { AuthUser, CurrentSubmissionState, QuestionItem, Room, Student, StudentStatus } from './types'
+import type {
+  AuthUser,
+  CurrentSubmissionState,
+  ExamStatus,
+  NewQuestionInput,
+  QuestionItem,
+  Room,
+  Student,
+  StudentSession,
+  StudentStatus,
+  SubmissionResult,
+  TeacherQuestion,
+} from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1'
 
+// Chuẩn hóa trạng thái thí sinh từ backend (APPROVED, IN_PROGRESS, ...) về trạng thái hiển thị
+export function toStudentStatus(raw: string | undefined): StudentStatus {
+  switch (raw?.toUpperCase()) {
+    case 'APPROVED':
+      return 'approved'
+    case 'IN_PROGRESS':
+      return 'in_progress'
+    case 'REJECTED':
+      return 'rejected'
+    case 'SUBMITTED':
+      return 'submitted'
+    case 'ABSENT':
+      return 'absent'
+    default:
+      return 'pending'
+  }
+}
+
+function toExamStatus(raw: string): ExamStatus {
+  return raw.toLowerCase() as ExamStatus
+}
+
+function mapExam(e: any): Room {
+  return {
+    id: e.id,
+    name: e.title,
+    code: e.joinCode,
+    duration: e.durationMinutes ?? Math.round(e.durationSeconds / 60),
+    status: toExamStatus(e.status),
+    createdAt: e.createdAt,
+    startsAt: e.startsAt,
+    endsAt: e.endsAt,
+    questionCount: e.questionCount ?? 0,
+    participantCount: e.participantCount ?? 0,
+  }
+}
+
+function mapTeacherQuestion(q: any): TeacherQuestion {
+  return {
+    id: q.id,
+    topic: q.topic,
+    text: q.prompt,
+    points: q.points,
+    position: q.position,
+    options: q.options.map((o: any) => ({ id: o.id, text: o.text, position: o.position, isCorrect: o.isCorrect })),
+  }
+}
+
+export class ApiError extends Error {
+  constructor(message: string, public status?: number, public code?: string) {
+    super(message)
+  }
+}
+
 class ApiClient {
-  private teacherToken: string | null = null
+  // authToken: phiên đăng nhập tài khoản (giáo viên / học sinh)
+  // participantToken: phiên làm bài của thí sinh trong một kỳ thi cụ thể
+  private authToken: string | null = null
   private participantToken: string | null = null
+  private onUnauthorized: (() => void) | null = null
 
   constructor() {
-    this.teacherToken = localStorage.getItem('examly_teacher_token')
+    this.authToken = localStorage.getItem('examly_auth_token')
     this.participantToken = localStorage.getItem('examly_participant_token')
   }
 
-  setTeacherToken(token: string | null) {
-    this.teacherToken = token
-    if (token) localStorage.setItem('examly_teacher_token', token)
-    else localStorage.removeItem('examly_teacher_token')
+  setAuthToken(token: string | null) {
+    this.authToken = token
+    if (token) localStorage.setItem('examly_auth_token', token)
+    else localStorage.removeItem('examly_auth_token')
   }
 
-  getTeacherToken(): string | null {
-    return this.teacherToken
+  getAuthToken(): string | null {
+    return this.authToken
   }
 
   setParticipantToken(token: string | null) {
@@ -31,30 +100,44 @@ class ApiClient {
     return this.participantToken
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}, asRole?: 'teacher' | 'student'): Promise<T> {
+  // Gọi khi phiên đăng nhập hết hạn để giao diện quay về màn hình đăng nhập
+  setUnauthorizedHandler(handler: (() => void) | null) {
+    this.onUnauthorized = handler
+  }
+
+  logout() {
+    this.setAuthToken(null)
+    this.setParticipantToken(null)
+  }
+
+  private async request<T>(endpoint: string, options: RequestInit = {}, auth?: 'user' | 'participant'): Promise<T> {
     const headers = new Headers(options.headers || {})
     if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
       headers.set('Content-Type', 'application/json')
     }
 
-    const token = asRole === 'teacher' ? this.teacherToken : asRole === 'student' ? this.participantToken : (this.teacherToken || this.participantToken)
+    const token = auth === 'user' ? this.authToken : auth === 'participant' ? this.participantToken : null
     if (token) {
       headers.set('Authorization', `Bearer ${token}`)
     }
 
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
-      headers,
-    })
+    let res: Response
+    try {
+      res = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers,
+      })
+    } catch {
+      throw new ApiError('Không thể kết nối máy chủ. Vui lòng kiểm tra kết nối mạng hoặc backend.')
+    }
 
     const data = await res.json().catch(() => null)
 
     if (!res.ok) {
-      const errorMsg = data?.message || data?.error || `HTTP error ${res.status}`
-      const err = new Error(errorMsg)
-      ;(err as any).status = res.status
-      ;(err as any).data = data
-      throw err
+      if (res.status === 401 && auth === 'user') {
+        this.onUnauthorized?.()
+      }
+      throw new ApiError(data?.message || data?.error || `Lỗi máy chủ (HTTP ${res.status})`, res.status, data?.error)
     }
 
     return data as T
@@ -71,125 +154,154 @@ class ApiClient {
   }
 
   // Auth
-  async login(email: string, password: string): Promise<{ token: string; user: AuthUser }> {
+  async login(email: string, password: string): Promise<AuthUser> {
     const data = await this.request<{ token: string; user: AuthUser }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     })
-    this.setTeacherToken(data.token)
-    return data
+    this.setAuthToken(data.token)
+    return data.user
   }
 
-  async getMe(): Promise<{ user: AuthUser }> {
-    return this.request<{ user: AuthUser }>('/auth/me', {}, 'teacher')
+  async register(input: { email: string; password: string; displayName: string; role: 'TEACHER' | 'STUDENT' }): Promise<AuthUser> {
+    const data = await this.request<{ token: string; user: AuthUser }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+    this.setAuthToken(data.token)
+    return data.user
+  }
+
+  async getMe(): Promise<AuthUser> {
+    const res = await this.request<{ user: AuthUser }>('/auth/me', {}, 'user')
+    return res.user
   }
 
   // Exams (Teacher)
-  async createExam(title: string, durationMinutes: number): Promise<{ exam: Room; joinCode: string }> {
-    const res = await this.request<any>('/exams', {
+  async createExam(title: string, durationMinutes: number): Promise<Room> {
+    const res = await this.request<{ exam: any }>('/exams', {
       method: 'POST',
       body: JSON.stringify({ title, durationMinutes }),
-    }, 'teacher')
-
-    return {
-      exam: {
-        id: res.exam.id,
-        name: res.exam.title,
-        code: res.joinCode,
-        duration: res.exam.durationMinutes || durationMinutes,
-        status: res.exam.status.toLowerCase(),
-        createdAt: res.exam.createdAt,
-      },
-      joinCode: res.joinCode,
-    }
+    }, 'user')
+    return mapExam(res.exam)
   }
 
   async listExams(): Promise<Room[]> {
-    const res = await this.request<{ exams: any[] }>('/exams', {}, 'teacher')
-    return res.exams.map((e) => ({
-      id: e.id,
-      name: e.title,
-      code: e.joinCode,
-      duration: e.durationMinutes,
-      status: e.status.toLowerCase(),
-      createdAt: e.createdAt,
-      startsAt: e.startsAt,
-      endsAt: e.endsAt,
-    }))
+    const res = await this.request<{ exams: any[] }>('/exams', {}, 'user')
+    return res.exams.map(mapExam)
   }
 
-  async startExam(examId: string): Promise<any> {
-    return this.request(`/exams/${examId}/start`, { method: 'POST' }, 'teacher')
+  async startExam(examId: string): Promise<Room> {
+    const res = await this.request<{ exam: any }>(`/exams/${examId}/start`, { method: 'POST' }, 'user')
+    return mapExam(res.exam)
   }
 
-  async finishExam(examId: string): Promise<any> {
-    return this.request(`/exams/${examId}/finish`, { method: 'POST' }, 'teacher')
+  async finishExam(examId: string): Promise<Room> {
+    const res = await this.request<{ exam: any }>(`/exams/${examId}/finish`, { method: 'POST' }, 'user')
+    return mapExam(res.exam)
   }
 
   async getParticipants(examId: string): Promise<Student[]> {
-    const res = await this.request<{ participants: any[] }>(`/exams/${examId}/participants`, {}, 'teacher')
+    const res = await this.request<{ participants: any[] }>(`/exams/${examId}/participants`, {}, 'user')
     return res.participants.map((p) => ({
       id: p.id,
       name: p.name,
       className: p.className,
-      roomCode: p.roomCode,
-      status: p.status as StudentStatus,
+      status: toStudentStatus(p.rawStatus ?? p.status),
       joinedAt: p.joinedAt,
       tabWarnings: p.tabWarnings,
       score: p.score,
     }))
   }
 
-  async decideParticipant(examId: string, participantId: string, decision: 'APPROVED' | 'REJECTED' | 'PENDING'): Promise<any> {
-    return this.request(`/exams/${examId}/participants/${participantId}/decision`, {
+  async decideParticipant(examId: string, participantId: string, decision: 'APPROVED' | 'REJECTED' | 'PENDING'): Promise<void> {
+    await this.request(`/exams/${examId}/participants/${participantId}/decision`, {
       method: 'POST',
       body: JSON.stringify({ decision }),
-    }, 'teacher')
+    }, 'user')
   }
 
-  // Student participation
-  async joinExam(joinCode: string, displayName: string, className: string): Promise<{ participantToken: string; participant: any; exam: any }> {
-    const res = await this.request<any>('/exams/join', {
+  // Questions (Teacher)
+  async getTeacherQuestions(examId: string): Promise<TeacherQuestion[]> {
+    const res = await this.request<{ questions: any[] }>(`/exams/${examId}/questions`, {}, 'user')
+    return res.questions.map(mapTeacherQuestion)
+  }
+
+  async createQuestion(examId: string, input: NewQuestionInput): Promise<TeacherQuestion> {
+    const res = await this.request<{ question: any }>(`/exams/${examId}/questions`, {
       method: 'POST',
-      body: JSON.stringify({ joinCode, displayName, className }),
-    })
-    if (res.participantToken) {
-      this.setParticipantToken(res.participantToken)
+      body: JSON.stringify(input),
+    }, 'user')
+    return mapTeacherQuestion(res.question)
+  }
+
+  async importQuestions(examId: string, questions: NewQuestionInput[], replace: boolean): Promise<TeacherQuestion[]> {
+    const res = await this.request<{ questions: any[] }>(`/exams/${examId}/questions/import`, {
+      method: 'POST',
+      body: JSON.stringify({ questions, replace }),
+    }, 'user')
+    return res.questions.map(mapTeacherQuestion)
+  }
+
+  async deleteQuestion(examId: string, questionId: string): Promise<void> {
+    await this.request(`/exams/${examId}/questions/${questionId}`, { method: 'DELETE' }, 'user')
+  }
+
+  // Student participation (họ tên lấy từ tài khoản học sinh đang đăng nhập)
+  async joinExam(joinCode: string, className: string): Promise<void> {
+    const res = await this.request<{ participantToken: string }>('/exams/join', {
+      method: 'POST',
+      body: JSON.stringify({ joinCode, className }),
+    }, 'user')
+    this.setParticipantToken(res.participantToken)
+  }
+
+  async getStudentSession(): Promise<StudentSession> {
+    const { participant: p, exam: e } = await this.request<{ participant: any; exam: any }>('/exams/my-status', {}, 'participant')
+    return {
+      participantId: p.id,
+      displayName: p.displayName,
+      className: p.className,
+      status: toStudentStatus(p.status),
+      tabWarnings: p.tabWarnings ?? 0,
+      score: p.score ?? undefined,
+      examId: e.id,
+      examTitle: e.title,
+      joinCode: e.joinCode,
+      examStatus: toExamStatus(e.status),
+      durationMinutes: Math.round(e.durationSeconds / 60),
     }
-    return res
   }
 
-  async getStudentStatus(): Promise<{ participant: any; exam: any }> {
-    return this.request<any>('/exams/my-status', {}, 'student')
-  }
-
-  async getStudentQuestions(examId: string): Promise<{ questions: QuestionItem[]; exam: any }> {
-    return this.request<{ questions: QuestionItem[]; exam: any }>(`/exams/${examId}/student-questions`, {}, 'student')
+  async getStudentQuestions(examId: string): Promise<QuestionItem[]> {
+    const res = await this.request<{ questions: QuestionItem[] }>(`/exams/${examId}/student-questions`, {}, 'participant')
+    return res.questions
   }
 
   async getCurrentSubmission(): Promise<CurrentSubmissionState> {
-    return this.request<CurrentSubmissionState>('/submissions/current', {}, 'student')
+    return this.request<CurrentSubmissionState>('/submissions/current', {}, 'participant')
   }
 
-  async saveAnswer(questionId: string, selectedOptionId: string | null): Promise<{ saved: boolean }> {
-    return this.request<{ saved: boolean }>(`/submissions/current/answers/${questionId}`, {
+  async saveAnswer(questionId: string, selectedOptionId: string | null): Promise<void> {
+    await this.request(`/submissions/current/answers/${questionId}`, {
       method: 'PUT',
       body: JSON.stringify({ selectedOptionId }),
-    }, 'student')
+    }, 'participant')
   }
 
-  async submitExam(reason: 'MANUAL' | 'TIMEOUT' = 'MANUAL'): Promise<{ submission: any; alreadySubmitted: boolean }> {
-    return this.request<any>('/submissions/current/submit', {
+  async submitExam(reason: 'MANUAL' | 'TIMEOUT' = 'MANUAL'): Promise<SubmissionResult> {
+    const res = await this.request<{ submission: SubmissionResult }>('/submissions/current/submit', {
       method: 'POST',
       body: JSON.stringify({ reason }),
-    }, 'student')
+    }, 'participant')
+    return res.submission
   }
 
-  async sendProctoringEvent(eventType: 'TAB_HIDDEN' | 'TAB_VISIBLE', metadata?: Record<string, unknown>): Promise<{ ok: boolean; tabWarnings: number }> {
-    return this.request<any>('/proctoring/events', {
+  async sendProctoringEvent(eventType: 'TAB_HIDDEN' | 'TAB_VISIBLE', metadata?: Record<string, unknown>): Promise<{ tabWarnings?: number }> {
+    return this.request<{ tabWarnings?: number }>('/proctoring/events', {
       method: 'POST',
       body: JSON.stringify({ eventType, metadata }),
-    }, 'student')
+    }, 'participant')
   }
 }
 

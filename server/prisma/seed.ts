@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, ExamStatus, ParticipantStatus } from '@prisma/client'
+import { PrismaClient, UserRole, ExamStatus } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { createHash } from 'node:crypto'
 
@@ -28,6 +28,29 @@ export async function seedDatabase() {
     console.log(`✓ Đã tạo tài khoản giáo viên demo: ${teacher.email}`)
   } else {
     console.log(`ℹ Tài khoản giáo viên demo đã tồn tại: ${teacher.email}`)
+  }
+
+  // 1b. Tạo tài khoản học sinh demo (đăng nhập để tham gia phòng thi)
+  const sampleStudents = [
+    { email: 'student@examly.vn', displayName: 'Võ Thành Nam' },
+    { email: 'student2@examly.vn', displayName: 'Bùi Thu Trang' },
+  ]
+
+  for (const s of sampleStudents) {
+    const existing = await prisma.user.findUnique({ where: { email: s.email } })
+    if (existing) {
+      console.log(`ℹ Tài khoản học sinh demo đã tồn tại: ${s.email}`)
+      continue
+    }
+    await prisma.user.create({
+      data: {
+        email: s.email,
+        passwordHash,
+        displayName: s.displayName,
+        role: UserRole.STUDENT,
+      },
+    })
+    console.log(`✓ Đã tạo tài khoản học sinh demo: ${s.email}`)
   }
 
   // 2. Tạo phòng thi mẫu EXAM-101
@@ -123,28 +146,6 @@ export async function seedDatabase() {
       })
     }
     console.log(`✓ Đã tạo ${sampleQuestions.length} câu hỏi trắc nghiệm mẫu`)
-
-    // 4. Tạo các thí sinh mẫu ban đầu
-    const sampleParticipants = [
-      { displayName: 'Nguyễn Minh Anh', className: '12A1', status: ParticipantStatus.APPROVED },
-      { displayName: 'Trần Gia Huy', className: '12A2', status: ParticipantStatus.PENDING },
-      { displayName: 'Lê Khánh Linh', className: '12A1', status: ParticipantStatus.PENDING },
-      { displayName: 'Phạm Đức Long', className: '12A3', status: ParticipantStatus.REJECTED },
-    ]
-
-    for (const p of sampleParticipants) {
-      await prisma.participant.create({
-        data: {
-          examId: exam.id,
-          displayName: p.displayName,
-          className: p.className,
-          status: p.status,
-          approvedById: p.status === ParticipantStatus.APPROVED ? teacher.id : null,
-          approvedAt: p.status === ParticipantStatus.APPROVED ? new Date() : null,
-        },
-      })
-    }
-    console.log(`✓ Đã tạo ${sampleParticipants.length} thí sinh mẫu ban đầu`)
   }
 
   console.log('--- Hoàn tất seeding dữ liệu mẫu! ---')

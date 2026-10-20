@@ -21,6 +21,8 @@ export function createApp(): Express {
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     })
   )
+  // Nhập đề từ file có thể gửi tới 300 câu hỏi nên cho phép body lớn hơn các route khác
+  app.use('/api/v1/exams/:examId/questions/import', express.json({ limit: '2mb' }))
   app.use(express.json({ limit: '200kb' }))
 
   // Health check endpoint

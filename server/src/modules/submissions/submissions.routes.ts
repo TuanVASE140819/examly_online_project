@@ -6,7 +6,9 @@ import { validateBody } from '../../middleware/validate.js'
 
 export const submissionsRoutes = Router()
 
-submissionsRoutes.use(requireAuth, requireExamParticipant)
+// Router được mount tại /api/v1 nên phải giới hạn middleware theo prefix,
+// nếu không sẽ chặn cả các route của giáo viên phía sau (ví dụ GET/POST /exams)
+submissionsRoutes.use('/submissions', requireAuth, requireExamParticipant)
 
 // Lấy thông tin bài làm hiện tại (phục vụ khôi phục khi F5)
 submissionsRoutes.get('/submissions/current', SubmissionsController.getCurrentSubmission)

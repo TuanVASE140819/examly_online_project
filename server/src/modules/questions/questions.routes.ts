@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { UserRole } from '@prisma/client'
 import { QuestionsController } from './questions.controller.js'
-import { createQuestionSchema } from './questions.schemas.js'
+import { createQuestionSchema, importQuestionsSchema } from './questions.schemas.js'
 import { requireAuth, requireExamParticipant, requireRole } from '../../middleware/auth.js'
 import { validateBody } from '../../middleware/validate.js'
 
@@ -21,6 +21,15 @@ questionsRoutes.post(
   requireRole(UserRole.TEACHER, UserRole.ADMIN),
   validateBody(createQuestionSchema),
   QuestionsController.createQuestion
+)
+
+// Giáo viên nhập nhiều câu hỏi từ file (file được đọc ở trình duyệt, gửi lên dạng JSON)
+questionsRoutes.post(
+  '/exams/:examId/questions/import',
+  requireAuth,
+  requireRole(UserRole.TEACHER, UserRole.ADMIN),
+  validateBody(importQuestionsSchema),
+  QuestionsController.importQuestions
 )
 
 questionsRoutes.delete(

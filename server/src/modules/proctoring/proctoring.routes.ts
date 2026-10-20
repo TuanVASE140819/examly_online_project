@@ -7,7 +7,8 @@ import { proctoringLimiter } from '../../middleware/rateLimiter.js'
 
 export const proctoringRoutes = Router()
 
-proctoringRoutes.use(requireAuth, requireExamParticipant)
+// Chỉ áp dụng cho /proctoring, tránh chặn các route khác cùng mount tại /api/v1
+proctoringRoutes.use('/proctoring', requireAuth, requireExamParticipant)
 
 // Ghi nhận sự kiện chuyển tab/ẩn màn hình
 proctoringRoutes.post(

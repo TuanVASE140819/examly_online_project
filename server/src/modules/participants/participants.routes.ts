@@ -8,8 +8,15 @@ import { joinLimiter } from '../../middleware/rateLimiter.js'
 
 export const participantsRoutes = Router()
 
-// Học sinh tham gia phòng thi (Public + Rate limit)
-participantsRoutes.post('/exams/join', joinLimiter, validateBody(joinRoomSchema), ParticipantsController.joinRoom)
+// Học sinh tham gia phòng thi (Yêu cầu đăng nhập tài khoản học sinh + Rate limit)
+participantsRoutes.post(
+  '/exams/join',
+  joinLimiter,
+  requireAuth,
+  requireRole(UserRole.STUDENT),
+  validateBody(joinRoomSchema),
+  ParticipantsController.joinRoom
+)
 
 // Học sinh kiểm tra trạng thái duyệt và thời gian thi
 participantsRoutes.get('/exams/my-status', requireAuth, ParticipantsController.getMyStatus)

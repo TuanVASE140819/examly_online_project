@@ -19,7 +19,7 @@ export const socketRooms = {
 export const socketEmitter = {
   // Báo cho giáo viên có thí sinh mới gửi yêu cầu
   participantRequested(examId: string, participant: { id: string; displayName: string; className: string; status: string; joinedAt: string; tabWarnings: number }) {
-    ioInstance?.to(socketRooms.teacher(examId)).emit('participant:requested', participant)
+    ioInstance?.to(socketRooms.teacher(examId)).emit('participant:requested', { examId, ...participant })
   },
 
   // Báo cho thí sinh & giáo viên khi được duyệt
@@ -30,6 +30,7 @@ export const socketEmitter = {
       approvedAt,
     })
     ioInstance?.to(socketRooms.teacher(examId)).emit('participant:status-changed', {
+      examId,
       participantId,
       status: 'APPROVED',
     })
@@ -42,6 +43,7 @@ export const socketEmitter = {
       status: 'REJECTED',
     })
     ioInstance?.to(socketRooms.teacher(examId)).emit('participant:status-changed', {
+      examId,
       participantId,
       status: 'REJECTED',
     })
@@ -50,23 +52,21 @@ export const socketEmitter = {
   // Báo trạng thái học sinh thay đổi (ví dụ reset về pending)
   participantStatusChanged(examId: string, participantId: string, status: string) {
     ioInstance?.to(socketRooms.participant(participantId)).emit('participant:status-changed', {
+      examId,
       participantId,
       status,
     })
     ioInstance?.to(socketRooms.teacher(examId)).emit('participant:status-changed', {
+      examId,
       participantId,
       status,
     })
   },
 
   // Báo bắt đầu kỳ thi
+  // Giáo viên ở cả 2 room nên phát một lần cho cả hai để Socket.IO tự loại trùng
   examStarted(examId: string, data: { startsAt: string; endsAt: string; durationSeconds: number }) {
-    ioInstance?.to(socketRooms.public(examId)).emit('exam:started', {
-      examId,
-      status: 'ACTIVE',
-      ...data,
-    })
-    ioInstance?.to(socketRooms.teacher(examId)).emit('exam:started', {
+    ioInstance?.to([socketRooms.public(examId), socketRooms.teacher(examId)]).emit('exam:started', {
       examId,
       status: 'ACTIVE',
       ...data,
@@ -75,12 +75,7 @@ export const socketEmitter = {
 
   // Báo kết thúc kỳ thi
   examEnded(examId: string, endedAt: string) {
-    ioInstance?.to(socketRooms.public(examId)).emit('exam:ended', {
-      examId,
-      status: 'ENDED',
-      endedAt,
-    })
-    ioInstance?.to(socketRooms.teacher(examId)).emit('exam:ended', {
+    ioInstance?.to([socketRooms.public(examId), socketRooms.teacher(examId)]).emit('exam:ended', {
       examId,
       status: 'ENDED',
       endedAt,
@@ -89,12 +84,12 @@ export const socketEmitter = {
 
   // Cảnh báo giám sát (chuyển tab) gửi tới giáo viên
   proctoringWarning(examId: string, warning: { participantId: string; displayName: string; tabWarnings: number; occurredAt: string }) {
-    ioInstance?.to(socketRooms.teacher(examId)).emit('proctoring:warning', warning)
+    ioInstance?.to(socketRooms.teacher(examId)).emit('proctoring:warning', { examId, ...warning })
   },
 
   // Báo thí sinh đã nộp bài tới giáo viên
   participantSubmitted(examId: string, payload: { participantId: string; score: number | null; submittedAt: string }) {
-    ioInstance?.to(socketRooms.teacher(examId)).emit('participant:submitted', payload)
+    ioInstance?.to(socketRooms.teacher(examId)).emit('participant:submitted', { examId, ...payload })
     ioInstance?.to(socketRooms.participant(payload.participantId)).emit('submission:result', payload)
   },
 }

@@ -11,9 +11,9 @@ export class AuthController {
     }
   }
 
-  static async registerTeacher(req: Request, res: Response, next: NextFunction) {
+  static async register(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await AuthService.registerTeacher(req.body)
+      const result = await AuthService.register(req.body)
       return res.status(201).json(result)
     } catch (err) {
       next(err)

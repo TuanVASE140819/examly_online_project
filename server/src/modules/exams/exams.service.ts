@@ -1,9 +1,35 @@
-import { ExamStatus, UserRole } from '@prisma/client'
+import { ExamStatus, ParticipantStatus, UserRole } from '@prisma/client'
 import { prisma } from '../../lib/prisma.js'
+import { logger } from '../../lib/logger.js'
 import { generateJoinCode, hashJoinCode } from '../../lib/crypto.js'
 import { AppError } from '../../middleware/errorHandler.js'
 import { socketEmitter } from '../../sockets/socketEmitter.js'
+import { SubmissionsService } from '../submissions/submissions.service.js'
 import type { CreateExamInput, UpdateExamInput } from './exams.schemas.js'
+
+// Hẹn giờ tự động kết thúc kỳ thi khi hết thời gian (theo examId)
+const autoFinishTimers = new Map<string, NodeJS.Timeout>()
+
+function clearAutoFinish(examId: string) {
+  const timer = autoFinishTimers.get(examId)
+  if (timer) {
+    clearTimeout(timer)
+    autoFinishTimers.delete(examId)
+  }
+}
+
+function scheduleAutoFinish(examId: string, endsAt: Date) {
+  clearAutoFinish(examId)
+  const delay = Math.max(0, endsAt.getTime() - Date.now())
+  const timer = setTimeout(() => {
+    autoFinishTimers.delete(examId)
+    ExamsService.closeExam(examId, 'SYSTEM').catch((err) => {
+      logger.error({ err, examId }, 'Tự động kết thúc kỳ thi thất bại')
+    })
+  }, delay)
+  timer.unref()
+  autoFinishTimers.set(examId, timer)
+}
 
 export class ExamsService {
   static async createExam(userId: string, data: CreateExamInput) {
@@ -206,6 +232,8 @@ export class ExamsService {
       },
     })
 
+    scheduleAutoFinish(exam.id, endsAt)
+
     return { exam: updated }
   }
 
@@ -223,6 +251,21 @@ export class ExamsService {
       return { exam }
     }
 
+    const updated = await ExamsService.closeExam(examId, userId)
+    return { exam: updated ?? exam }
+  }
+
+  // Đóng kỳ thi (giáo viên bấm kết thúc hoặc hết giờ):
+  // - Thí sinh đang làm bài được tự động nộp và chấm điểm (TIMEOUT)
+  // - Thí sinh đã duyệt nhưng chưa vào làm bài bị đánh dấu vắng (ABSENT)
+  static async closeExam(examId: string, actorId: string) {
+    clearAutoFinish(examId)
+
+    const exam = await prisma.exam.findUnique({ where: { id: examId } })
+    if (!exam || exam.status === ExamStatus.ENDED || exam.status === ExamStatus.CANCELLED) {
+      return exam
+    }
+
     const now = new Date()
     const updated = await prisma.exam.update({
       where: { id: examId },
@@ -232,17 +275,52 @@ export class ExamsService {
       },
     })
 
-    socketEmitter.examEnded(exam.id, now.toISOString())
+    const inProgress = await prisma.participant.findMany({
+      where: { examId, status: ParticipantStatus.IN_PROGRESS },
+      select: { id: true },
+    })
+
+    for (const p of inProgress) {
+      try {
+        await SubmissionsService.submitExam(p.id, { reason: 'TIMEOUT' })
+      } catch (err) {
+        logger.error({ err, examId, participantId: p.id }, 'Không thể tự động nộp bài cho thí sinh')
+      }
+    }
+
+    await prisma.participant.updateMany({
+      where: { examId, status: ParticipantStatus.APPROVED },
+      data: { status: ParticipantStatus.ABSENT },
+    })
+
+    // Phát sau khi đã chấm xong để client tải được kết quả cuối cùng
+    socketEmitter.examEnded(examId, now.toISOString())
 
     await prisma.auditLog.create({
       data: {
-        examId: exam.id,
-        actorId: userId,
+        examId,
+        actorId,
         action: 'EXAM_ENDED',
-        metadata: { endedAt: now },
+        metadata: { endedAt: now, autoSubmitted: inProgress.length },
       },
     })
 
-    return { exam: updated }
+    return updated
+  }
+
+  // Khôi phục hẹn giờ tự kết thúc cho các kỳ thi đang diễn ra khi server khởi động lại
+  static async resumeAutoFinish() {
+    const active = await prisma.exam.findMany({
+      where: { status: ExamStatus.ACTIVE, endsAt: { not: null } },
+      select: { id: true, endsAt: true },
+    })
+
+    for (const exam of active) {
+      scheduleAutoFinish(exam.id, exam.endsAt!)
+    }
+
+    if (active.length) {
+      logger.info(`Đã khôi phục hẹn giờ tự kết thúc cho ${active.length} kỳ thi đang diễn ra`)
+    }
   }
 }

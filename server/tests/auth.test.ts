@@ -74,6 +74,40 @@ describe('Kịch bản 1 & 2: Xác thực (Auth) và Phân quyền (RBAC)', () =
     expect(res.body.error).toBe('INVALID_CREDENTIALS')
   })
 
+  it('1.3. Đăng ký tài khoản học sinh: Trả về HTTP 201 với role STUDENT', async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce(null)
+    vi.mocked(prisma.user.create).mockImplementationOnce(async ({ data }: any) => ({
+      id: 'student-uuid-new',
+      ...data,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }))
+
+    const res = await request(app).post('/api/v1/auth/register').send({
+      email: 'Hocsinh.Moi@examly.vn',
+      password: 'MatKhau123@',
+      displayName: 'Học Sinh Mới',
+      role: 'STUDENT',
+    })
+
+    expect(res.status).toBe(201)
+    expect(res.body.token).toBeDefined()
+    expect(res.body.user.role).toBe('STUDENT')
+    expect(res.body.user.email).toBe('hocsinh.moi@examly.vn')
+  })
+
+  it('1.4. Không cho phép tự đăng ký tài khoản ADMIN: Trả về HTTP 400', async () => {
+    const res = await request(app).post('/api/v1/auth/register').send({
+      email: 'admin.gia@examly.vn',
+      password: 'MatKhau123@',
+      displayName: 'Admin Giả',
+      role: 'ADMIN',
+    })
+
+    expect(res.status).toBe(400)
+    expect(prisma.user.create).not.toHaveBeenCalled()
+  })
+
   it('2. Student không thể tạo kỳ thi: Trả về HTTP 403 FORBIDDEN', async () => {
     // Ký token với vai trò STUDENT
     const studentToken = jwt.sign(

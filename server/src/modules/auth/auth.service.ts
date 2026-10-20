@@ -43,7 +43,7 @@ export class AuthService {
     }
   }
 
-  static async registerTeacher(data: RegisterInput) {
+  static async register(data: RegisterInput) {
     const existing = await prisma.user.findUnique({
       where: { email: data.email.toLowerCase() },
     })
@@ -59,7 +59,7 @@ export class AuthService {
         email: data.email.toLowerCase(),
         passwordHash,
         displayName: data.displayName,
-        role: UserRole.TEACHER,
+        role: data.role === 'STUDENT' ? UserRole.STUDENT : UserRole.TEACHER,
       },
     })
 

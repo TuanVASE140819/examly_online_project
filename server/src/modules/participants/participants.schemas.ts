@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
+// Họ tên thí sinh lấy từ tài khoản học sinh đã đăng nhập, không nhận từ client
 export const joinRoomSchema = z.object({
   joinCode: z.string().trim().min(3, 'Mã phòng thi không được rỗng').max(32),
-  displayName: z.string().trim().min(2, 'Họ và tên tối thiểu 2 ký tự').max(120),
   className: z.string().trim().min(1, 'Lớp học không được rỗng').max(60),
 })
 

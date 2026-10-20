@@ -137,6 +137,15 @@ export class SubmissionsService {
       }
     }
 
+    if (participant.status !== ParticipantStatus.APPROVED && participant.status !== ParticipantStatus.IN_PROGRESS) {
+      throw new AppError(403, 'NOT_APPROVED', 'Thí sinh chưa được duyệt để làm bài.')
+    }
+
+    // Cho phép nộp khi kỳ thi đang diễn ra hoặc vừa kết thúc (nộp tự động khi hết giờ)
+    if (participant.exam.status !== ExamStatus.ACTIVE && participant.exam.status !== ExamStatus.ENDED) {
+      throw new AppError(409, 'EXAM_NOT_ACTIVE', 'Kỳ thi chưa bắt đầu.')
+    }
+
     const examId = participant.examId
 
     // Thực hiện chấm điểm trong Transaction

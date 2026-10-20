@@ -8,7 +8,18 @@ import { socketEmitter } from '../../sockets/socketEmitter.js'
 import type { DecisionInput, JoinRoomInput } from './participants.schemas.js'
 
 export class ParticipantsService {
-  static async joinRoom(data: JoinRoomInput) {
+  static async joinRoom(userId: string, data: JoinRoomInput) {
+    // Token phiên thi (participantToken) cũng mang role STUDENT nhưng sub là participantId,
+    // nên phải đối chiếu với bảng users để chắc chắn đây là tài khoản học sinh thật.
+    const account = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, displayName: true, role: true },
+    })
+
+    if (!account || account.role !== UserRole.STUDENT) {
+      throw new AppError(403, 'STUDENT_ACCOUNT_REQUIRED', 'Vui lòng đăng nhập bằng tài khoản học sinh để tham gia phòng thi.')
+    }
+
     const joinCodeHash = hashJoinCode(data.joinCode)
 
     const exam = await prisma.exam.findUnique({
@@ -30,12 +41,11 @@ export class ParticipantsService {
       throw new AppError(409, 'EXAM_CLOSED', 'Kỳ thi đã kết thúc hoặc không còn nhận học sinh.')
     }
 
-    // Kiểm tra xem học sinh này đã gửi yêu cầu trước đó chưa (tránh trùng lặp)
+    // Kiểm tra xem tài khoản này đã gửi yêu cầu vào phòng trước đó chưa (tránh trùng lặp)
     let participant = await prisma.participant.findFirst({
       where: {
         examId: exam.id,
-        displayName: data.displayName,
-        className: data.className,
+        userId: account.id,
       },
     })
 
@@ -43,7 +53,8 @@ export class ParticipantsService {
       participant = await prisma.participant.create({
         data: {
           examId: exam.id,
-          displayName: data.displayName,
+          userId: account.id,
+          displayName: account.displayName,
           className: data.className,
           status: ParticipantStatus.PENDING,
         },
@@ -165,6 +176,14 @@ export class ParticipantsService {
       throw new AppError(404, 'PARTICIPANT_NOT_FOUND', 'Không tìm thấy thí sinh.')
     }
 
+    if (exam.status === ExamStatus.ENDED || exam.status === ExamStatus.CANCELLED) {
+      throw new AppError(409, 'EXAM_CLOSED', 'Kỳ thi đã kết thúc, không thể thay đổi trạng thái thí sinh.')
+    }
+
+    if (participant.status === ParticipantStatus.SUBMITTED) {
+      throw new AppError(409, 'ALREADY_SUBMITTED', 'Thí sinh đã nộp bài, không thể thay đổi trạng thái.')
+    }
+
     const nextStatus =
       data.decision === 'APPROVED'
         ? ParticipantStatus.APPROVED
@@ -210,6 +229,7 @@ export class ParticipantsService {
           select: {
             id: true,
             title: true,
+            joinCode: true,
             status: true,
             durationSeconds: true,
             startsAt: true,

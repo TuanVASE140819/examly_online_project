@@ -4,6 +4,7 @@ import { env } from './config/env.js'
 import { setupSocketServer } from './sockets/socketServer.js'
 import { logger } from './lib/logger.js'
 import { prisma } from './lib/prisma.js'
+import { ExamsService } from './modules/exams/exams.service.js'
 
 export function startServer() {
   const app = createApp()
@@ -13,6 +14,9 @@ export function startServer() {
 
   const server = httpServer.listen(env.PORT, () => {
     logger.info(`🚀 Examly API đang hoạt động tại http://localhost:${env.PORT}`)
+    ExamsService.resumeAutoFinish().catch((err) => {
+      logger.error({ err }, 'Không thể khôi phục hẹn giờ kết thúc kỳ thi')
+    })
   })
 
   const shutdown = async (signal: string) => {
