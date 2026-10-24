@@ -50,7 +50,7 @@ export function AuthScreen({ isLiveConnected, onAuthenticated }: { isLiveConnect
             <BookOpenCheck size={22} />
           </div>
           <div>
-            <strong>examly</strong>
+            <strong>CBRN-e</strong>
             <span>LEARNING PLATFORM</span>
           </div>
         </div>
@@ -138,6 +138,7 @@ export function AuthScreen({ isLiveConnected, onAuthenticated }: { isLiveConnect
         <div className="privacy-note">
           <ShieldCheck size={15} /> {isLiveConnected ? 'Đã kết nối máy chủ — phiên đăng nhập được bảo vệ bằng JWT.' : 'Đang chờ kết nối tới máy chủ...'}
         </div>
+        <div className="credit">Credit: VuBinDev</div>
       </div>
     </div>
   )

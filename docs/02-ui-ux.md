@@ -1,7 +1,7 @@
 # 2. Thiết kế UI/UX
 
 ## 2.1. Định hướng hình ảnh
-- Tên demo: **Examly**.
+- Tên demo: **CBRN-e**.
 - Phong cách: sản phẩm SaaS giáo dục hiện đại, gọn, nhiều khoảng trắng, trạng thái rõ ràng.
 - Màu chính: xanh tím `#526EF4`; chữ chính `#17233C`; nền `#F6F8FC`; viền `#E9EDF4`.
 - Trạng thái: xanh lá = đã duyệt/hoàn thành; vàng = chờ duyệt; đỏ = từ chối/lỗi; tím xanh = đang hoạt động.

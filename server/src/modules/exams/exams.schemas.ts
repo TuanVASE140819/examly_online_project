@@ -12,5 +12,10 @@ export const updateExamSchema = z.object({
   durationMinutes: z.number().int().min(1).max(360).optional(),
 })
 
+export const networkPolicySchema = z.object({
+  allowExternalNetwork: z.boolean(),
+})
+
 export type CreateExamInput = z.infer<typeof createExamSchema>
 export type UpdateExamInput = z.infer<typeof updateExamSchema>
+export type NetworkPolicyInput = z.infer<typeof networkPolicySchema>

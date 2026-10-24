@@ -8,6 +8,7 @@ import {
   Copy,
   FileUp,
   Flag,
+  Globe,
   ListChecks,
   Play,
   Plus,
@@ -19,6 +20,7 @@ import {
   Timer,
   Trash2,
   Users,
+  Wifi,
   X,
   Zap,
 } from 'lucide-react'
@@ -47,6 +49,9 @@ const activityStyle: Record<ActivityKind, { tone: string; icon: JSX.Element }> =
 }
 
 const SELECTED_EXAM_KEY = 'examly_teacher_exam'
+
+// Giáo viên mở trang ngay trên máy chủ thì IP là loopback, không có ý nghĩa để hiển thị
+const isLoopback = (ip: string) => ip === '::1' || ip.startsWith('127.')
 
 interface Props {
   user: AuthUser
@@ -257,6 +262,24 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
     }
   }
 
+  const toggleNetwork = async () => {
+    if (!room) return
+    setBusy(true)
+    try {
+      const policy = await api.setNetworkPolicy(room.id, !room.allowExternalNetwork)
+      updateExam(room.id, policy)
+      notify(
+        policy.allowExternalNetwork
+          ? 'Học sinh cùng mạng hoặc khác mạng đều tham gia được phòng thi.'
+          : 'Chỉ học sinh dùng chung mạng với bạn mới tham gia được phòng thi.'
+      )
+    } catch (err: any) {
+      notify(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const refreshStudents = async () => {
     if (!room) return
     try {
@@ -322,7 +345,6 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
   }
 
   const today = new Date()
-  const greeting = today.getHours() < 12 ? 'Chào buổi sáng' : today.getHours() < 18 ? 'Chào buổi chiều' : 'Chào buổi tối'
   const todayLabel = today.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
 
   const roomHint = !room
@@ -342,9 +364,6 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
           <div className="eyebrow">
             <Sparkles size={14} /> {todayLabel}
           </div>
-          <h1>
-            {greeting}, {user.displayName.split(' ').slice(-2).join(' ')} <span className="wave">✦</span>
-          </h1>
           <p>{room ? `Đang quản lý phòng ${room.code} — ${room.name}.` : 'Bạn chưa có phòng thi nào. Hãy tạo phòng thi đầu tiên.'}</p>
         </div>
         <button className="button primary" onClick={() => setShowCreate(true)}>
@@ -428,6 +447,32 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
                     </span>
                   )}
                 </div>
+              </div>
+              <div className="network-toggle">
+                <span className={`network-icon ${room.allowExternalNetwork ? 'open' : ''}`}>
+                  {room.allowExternalNetwork ? <Globe size={16} /> : <Wifi size={16} />}
+                </span>
+                <div>
+                  <strong>Cho phép học sinh khác mạng</strong>
+                  <small>
+                    {room.allowExternalNetwork
+                      ? 'Học sinh cùng mạng hoặc khác mạng đều tham gia được.'
+                      : `Chỉ học sinh dùng chung mạng Wi-Fi/LAN với bạn mới tham gia được${
+                          room.teacherNetworkIp && !isLoopback(room.teacherNetworkIp) ? ` (IP mạng: ${room.teacherNetworkIp})` : ''
+                        }. Đổi mạng thì bật rồi tắt lại công tắc.`}
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={room.allowExternalNetwork}
+                  aria-label="Cho phép học sinh khác mạng"
+                  className={`switch ${room.allowExternalNetwork ? 'on' : ''}`}
+                  disabled={busy || room.status === 'ended' || room.status === 'cancelled'}
+                  onClick={toggleNetwork}
+                >
+                  <span />
+                </button>
               </div>
               <div className="room-footer">
                 {students.length > 0 && (

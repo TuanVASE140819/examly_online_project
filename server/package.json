@@ -1,5 +1,5 @@
 {
-  "name": "examly-api",
+  "name": "cbrn-e-api",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,7 +9,6 @@
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts",
     "test": "vitest run"
   },
   "dependencies": {

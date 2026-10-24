@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client'
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:4000'
+// Để trống: kết nối cùng địa chỉ với trang web (qua proxy)
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || undefined
 
 type Listener = (...args: any[]) => void
 
@@ -19,13 +20,14 @@ class SocketClient {
     this.disconnect()
     this.token = token
 
-    this.socket = io(SOCKET_URL, {
+    const options = {
       auth: { token },
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
-    })
+    }
+    this.socket = SOCKET_URL ? io(SOCKET_URL, options) : io(options)
 
     this.socket.on('connect', () => {
       console.log('⚡ Socket.IO đã kết nối thành công:', this.socket?.id)

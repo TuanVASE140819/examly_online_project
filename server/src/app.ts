@@ -1,3 +1,4 @@
+import path from 'node:path'
 import express, { type Express } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -12,6 +13,10 @@ import { proctoringRoutes } from './modules/proctoring/proctoring.routes.js'
 
 export function createApp(): Express {
   const app = express()
+
+  // Tin X-Forwarded-For từ proxy phía trước (mặc định Vite proxy trên cùng máy, trên Render là 1 lớp)
+  // để req.ip là IP thật của học sinh (dùng cho kiểm tra cùng mạng và rate limit)
+  app.set('trust proxy', env.TRUST_PROXY)
 
   app.use(helmet())
   app.use(
@@ -29,7 +34,7 @@ export function createApp(): Express {
   app.get('/api/v1/health', (_req, res) => {
     res.json({
       ok: true,
-      service: 'examly-api',
+      service: 'cbrn-e-api',
       timestamp: new Date().toISOString(),
     })
   })
@@ -41,6 +46,13 @@ export function createApp(): Express {
   app.use('/api/v1', submissionsRoutes)
   app.use('/api/v1', proctoringRoutes)
   app.use('/api/v1/exams', examsRoutes)
+
+  // Triển khai một dịch vụ (Render): phục vụ frontend đã build, mọi đường dẫn ngoài /api trả về index.html
+  if (env.FRONTEND_DIST) {
+    const dist = path.resolve(env.FRONTEND_DIST)
+    app.use(express.static(dist))
+    app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')))
+  }
 
   // 404 handler cho các route không tồn tại
   app.use((_req, res) => {

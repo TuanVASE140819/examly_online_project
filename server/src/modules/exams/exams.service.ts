@@ -2,10 +2,11 @@ import { ExamStatus, ParticipantStatus, UserRole } from '@prisma/client'
 import { prisma } from '../../lib/prisma.js'
 import { logger } from '../../lib/logger.js'
 import { generateJoinCode, hashJoinCode } from '../../lib/crypto.js'
+import { normalizeIp } from '../../lib/network.js'
 import { AppError } from '../../middleware/errorHandler.js'
 import { socketEmitter } from '../../sockets/socketEmitter.js'
 import { SubmissionsService } from '../submissions/submissions.service.js'
-import type { CreateExamInput, UpdateExamInput } from './exams.schemas.js'
+import type { CreateExamInput, NetworkPolicyInput, UpdateExamInput } from './exams.schemas.js'
 
 // Hẹn giờ tự động kết thúc kỳ thi khi hết thời gian (theo examId)
 const autoFinishTimers = new Map<string, NodeJS.Timeout>()
@@ -74,6 +75,7 @@ export class ExamsService {
         status: exam.status,
         durationMinutes: Math.round(exam.durationSeconds / 60),
         durationSeconds: exam.durationSeconds,
+        allowExternalNetwork: exam.allowExternalNetwork,
         createdAt: exam.createdAt,
       },
     }
@@ -106,6 +108,8 @@ export class ExamsService {
         durationSeconds: e.durationSeconds,
         participantCount: e._count.participants,
         questionCount: e._count.questions,
+        allowExternalNetwork: e.allowExternalNetwork,
+        teacherNetworkIp: e.teacherNetworkIp,
         createdAt: e.createdAt,
         startsAt: e.startsAt,
         endsAt: e.endsAt,
@@ -145,6 +149,8 @@ export class ExamsService {
         durationSeconds: exam.durationSeconds,
         participantCount: exam._count.participants,
         questionCount: exam._count.questions,
+        allowExternalNetwork: exam.allowExternalNetwork,
+        teacherNetworkIp: exam.teacherNetworkIp,
         startsAt: exam.startsAt,
         endsAt: exam.endsAt,
         createdAt: exam.createdAt,
@@ -172,6 +178,43 @@ export class ExamsService {
         title: data.title,
         description: data.description,
         durationSeconds: data.durationMinutes ? data.durationMinutes * 60 : undefined,
+      },
+    })
+
+    return { exam: updated }
+  }
+
+  // Cho phép đổi cả khi kỳ thi đang diễn ra (ví dụ mở cho học sinh ở nhà vào thi muộn).
+  // Khi khóa mạng, ghi nhận IP hiện tại của giáo viên làm "mạng của lớp".
+  static async setNetworkPolicy(userId: string, role: UserRole, examId: string, data: NetworkPolicyInput, clientIp?: string) {
+    const exam = await prisma.exam.findUnique({ where: { id: examId }, select: { id: true, ownerId: true, status: true } })
+    if (!exam) {
+      throw new AppError(404, 'EXAM_NOT_FOUND', 'Không tìm thấy kỳ thi.')
+    }
+
+    if (role !== UserRole.ADMIN && exam.ownerId !== userId) {
+      throw new AppError(403, 'FORBIDDEN', 'Bạn không có quyền sửa kỳ thi này.')
+    }
+
+    if (exam.status === ExamStatus.ENDED || exam.status === ExamStatus.CANCELLED) {
+      throw new AppError(409, 'INVALID_EXAM_STATE', 'Kỳ thi đã kết thúc, không thể đổi chế độ mạng.')
+    }
+
+    const updated = await prisma.exam.update({
+      where: { id: examId },
+      data: {
+        allowExternalNetwork: data.allowExternalNetwork,
+        teacherNetworkIp: data.allowExternalNetwork ? null : normalizeIp(clientIp),
+      },
+      select: { id: true, allowExternalNetwork: true, teacherNetworkIp: true },
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        examId,
+        actorId: userId,
+        action: 'EXAM_NETWORK_POLICY_CHANGED',
+        metadata: { allowExternalNetwork: updated.allowExternalNetwork, teacherNetworkIp: updated.teacherNetworkIp },
       },
     })
 

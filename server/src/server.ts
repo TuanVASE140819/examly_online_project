@@ -13,7 +13,7 @@ export function startServer() {
   setupSocketServer(httpServer)
 
   const server = httpServer.listen(env.PORT, () => {
-    logger.info(`🚀 Examly API đang hoạt động tại http://localhost:${env.PORT}`)
+    logger.info(`🚀 CBRN-e API đang hoạt động tại http://localhost:${env.PORT}`)
     ExamsService.resumeAutoFinish().catch((err) => {
       logger.error({ err }, 'Không thể khôi phục hẹn giờ kết thúc kỳ thi')
     })

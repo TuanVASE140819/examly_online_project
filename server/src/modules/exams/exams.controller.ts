@@ -38,6 +38,15 @@ export class ExamsController {
     }
   }
 
+  static async setNetworkPolicy(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await ExamsService.setNetworkPolicy(req.user!.sub, req.user!.role, req.params['examId']!, req.body, req.ip)
+      return res.json(result)
+    } catch (err) {
+      next(err)
+    }
+  }
+
   static async startExam(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await ExamsService.startExam(req.user!.sub, req.user!.role, req.params['examId']!)

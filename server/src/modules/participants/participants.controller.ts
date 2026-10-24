@@ -4,7 +4,7 @@ import { ParticipantsService } from './participants.service.js'
 export class ParticipantsController {
   static async joinRoom(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await ParticipantsService.joinRoom(req.user!.sub, req.body)
+      const result = await ParticipantsService.joinRoom(req.user!.sub, req.body, req.ip)
       return res.status(201).json(result)
     } catch (err) {
       next(err)

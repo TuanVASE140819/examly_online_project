@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client'
 import { QuestionsController } from './questions.controller.js'
 import { createQuestionSchema, importQuestionsSchema } from './questions.schemas.js'
 import { requireAuth, requireExamParticipant, requireRole } from '../../middleware/auth.js'
+import { requireAllowedNetwork } from '../../middleware/network.js'
 import { validateBody } from '../../middleware/validate.js'
 
 export const questionsRoutes = Router()
@@ -44,5 +45,6 @@ questionsRoutes.get(
   '/exams/:examId/student-questions',
   requireAuth,
   requireExamParticipant,
+  requireAllowedNetwork,
   QuestionsController.getQuestionsForStudent
 )

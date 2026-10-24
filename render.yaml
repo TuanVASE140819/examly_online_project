@@ -1,0 +1,29 @@
+# Render Blueprint: một Web Service phục vụ cả giao diện (React đã build) lẫn API + Socket.IO.
+# Database dùng Postgres bên ngoài (Neon): dán chuỗi kết nối vào DATABASE_URL khi tạo Blueprint.
+services:
+  - type: web
+    name: cbrn-e
+    runtime: node
+    plan: free
+    region: singapore
+    # NODE_ENV=production làm npm ci bỏ devDependencies, nên phải --include=dev để có vite, tsc, prisma
+    buildCommand: >-
+      npm ci --include=dev && npm run build &&
+      cd server && npm ci --include=dev && npx prisma generate && npm run build
+    # Đồng bộ bảng trước khi chạy (gói free không có pre-deploy command)
+    startCommand: cd server && npx prisma db push --skip-generate && npm start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      # Render đứng trước ứng dụng đúng 1 lớp proxy
+      - key: TRUST_PROXY
+        value: "1"
+      - key: FRONTEND_DIST
+        value: ../dist

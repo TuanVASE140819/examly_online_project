@@ -23,6 +23,10 @@ export interface Room {
   endsAt?: string | null
   questionCount: number
   participantCount: number
+  // false: chỉ học sinh cùng mạng với giáo viên mới tham gia được
+  allowExternalNetwork: boolean
+  // IP của giáo viên được ghi nhận lúc khóa mạng
+  teacherNetworkIp: string | null
 }
 
 export interface OptionItem {

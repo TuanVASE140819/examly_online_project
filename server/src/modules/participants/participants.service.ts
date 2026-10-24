@@ -3,12 +3,13 @@ import { ExamStatus, ParticipantStatus, UserRole } from '@prisma/client'
 import { prisma } from '../../lib/prisma.js'
 import { env } from '../../config/env.js'
 import { hashJoinCode } from '../../lib/crypto.js'
+import { isSameNetworkAsTeacher, networkNotAllowedError } from '../../lib/network.js'
 import { AppError } from '../../middleware/errorHandler.js'
 import { socketEmitter } from '../../sockets/socketEmitter.js'
 import type { DecisionInput, JoinRoomInput } from './participants.schemas.js'
 
 export class ParticipantsService {
-  static async joinRoom(userId: string, data: JoinRoomInput) {
+  static async joinRoom(userId: string, data: JoinRoomInput, clientIp?: string) {
     // Token phiên thi (participantToken) cũng mang role STUDENT nhưng sub là participantId,
     // nên phải đối chiếu với bảng users để chắc chắn đây là tài khoản học sinh thật.
     const account = await prisma.user.findUnique({
@@ -30,6 +31,8 @@ export class ParticipantsService {
         status: true,
         durationSeconds: true,
         joinCode: true,
+        allowExternalNetwork: true,
+        teacherNetworkIp: true,
       },
     })
 
@@ -39,6 +42,10 @@ export class ParticipantsService {
 
     if (exam.status === ExamStatus.ENDED || exam.status === ExamStatus.CANCELLED) {
       throw new AppError(409, 'EXAM_CLOSED', 'Kỳ thi đã kết thúc hoặc không còn nhận học sinh.')
+    }
+
+    if (!exam.allowExternalNetwork && !isSameNetworkAsTeacher(clientIp, exam.teacherNetworkIp)) {
+      throw networkNotAllowedError()
     }
 
     // Kiểm tra xem tài khoản này đã gửi yêu cầu vào phòng trước đó chưa (tránh trùng lặp)

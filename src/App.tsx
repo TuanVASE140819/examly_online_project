@@ -89,7 +89,7 @@ function App() {
                 <BookOpenCheck size={22} />
               </div>
               <div>
-                <strong>examly</strong>
+                <strong>CBRN-e</strong>
                 <span>LEARNING PLATFORM</span>
               </div>
             </div>
@@ -120,6 +120,7 @@ function App() {
                   <LogOut size={17} />
                 </button>
               </div>
+              <div className="credit">Credit: VuBinDev</div>
             </div>
           </aside>
 

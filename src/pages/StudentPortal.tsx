@@ -595,7 +595,7 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
       )}
 
       <div className="exam-footnote">
-        <ShieldCheck size={15} /> Examly Online Exam <span>•</span> Đáp án được lưu tự động sau mỗi lần chọn.
+        <ShieldCheck size={15} /> CBRN-e Online Exam <span>•</span> Đáp án được lưu tự động sau mỗi lần chọn.
       </div>
 
       {showSubmit && (

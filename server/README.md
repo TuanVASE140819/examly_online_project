@@ -1,4 +1,4 @@
-# Examly API — backend starter
+# CBRN-e API — backend starter
 
 This is a **starter scaffold**, not a security-audited production server. It contains a PostgreSQL Prisma schema, JWT login, role checks, exam creation, room join, participant decision endpoints, audit rows, and authenticated Socket.IO teacher-room subscriptions.
 

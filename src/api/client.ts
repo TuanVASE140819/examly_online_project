@@ -12,7 +12,8 @@ import type {
   TeacherQuestion,
 } from './types'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1'
+// Mặc định gọi API cùng địa chỉ với trang web (qua proxy) để máy khác trong mạng cũng dùng được
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
 // Chuẩn hóa trạng thái thí sinh từ backend (APPROVED, IN_PROGRESS, ...) về trạng thái hiển thị
 export function toStudentStatus(raw: string | undefined): StudentStatus {
@@ -48,6 +49,8 @@ function mapExam(e: any): Room {
     endsAt: e.endsAt,
     questionCount: e.questionCount ?? 0,
     participantCount: e.participantCount ?? 0,
+    allowExternalNetwork: e.allowExternalNetwork ?? true,
+    teacherNetworkIp: e.teacherNetworkIp ?? null,
   }
 }
 
@@ -199,6 +202,14 @@ class ApiClient {
   async finishExam(examId: string): Promise<Room> {
     const res = await this.request<{ exam: any }>(`/exams/${examId}/finish`, { method: 'POST' }, 'user')
     return mapExam(res.exam)
+  }
+
+  async setNetworkPolicy(examId: string, allowExternalNetwork: boolean): Promise<Pick<Room, 'allowExternalNetwork' | 'teacherNetworkIp'>> {
+    const res = await this.request<{ exam: { allowExternalNetwork: boolean; teacherNetworkIp: string | null } }>(`/exams/${examId}/network`, {
+      method: 'PATCH',
+      body: JSON.stringify({ allowExternalNetwork }),
+    }, 'user')
+    return { allowExternalNetwork: res.exam.allowExternalNetwork, teacherNetworkIp: res.exam.teacherNetworkIp }
   }
 
   async getParticipants(examId: string): Promise<Student[]> {
