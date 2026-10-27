@@ -210,15 +210,23 @@ describe('Kịch bản 9, 10, 11, 12, 14, 15: Vòng đời Bài thi, Autosave, C
     } as any)
 
     // Giả lập transaction chấm điểm
+    const createSubmission = vi.fn().mockResolvedValueOnce({
+      id: 'sub-graded',
+      score: 8.0,
+      correctCount: 4,
+      totalQuestions: 5,
+      pendingEssays: 0,
+      submittedAt: new Date(),
+    })
     vi.mocked(prisma.$transaction).mockImplementationOnce(async (callback: any) => {
       const mockTx = {
         question: {
           findMany: vi.fn().mockResolvedValueOnce([
-            { id: 'q1', options: [{ id: 'opt1-correct' }] },
-            { id: 'q2', options: [{ id: 'opt2-correct' }] },
-            { id: 'q3', options: [{ id: 'opt3-correct' }] },
-            { id: 'q4', options: [{ id: 'opt4-correct' }] },
-            { id: 'q5', options: [{ id: 'opt5-correct' }] },
+            { id: 'q1', type: 'MULTIPLE_CHOICE', points: 1, options: [{ id: 'opt1-correct' }] },
+            { id: 'q2', type: 'MULTIPLE_CHOICE', points: 1, options: [{ id: 'opt2-correct' }] },
+            { id: 'q3', type: 'MULTIPLE_CHOICE', points: 1, options: [{ id: 'opt3-correct' }] },
+            { id: 'q4', type: 'MULTIPLE_CHOICE', points: 1, options: [{ id: 'opt4-correct' }] },
+            { id: 'q5', type: 'MULTIPLE_CHOICE', points: 1, options: [{ id: 'opt5-correct' }] },
           ]),
         },
         answer: {
@@ -231,13 +239,7 @@ describe('Kịch bản 9, 10, 11, 12, 14, 15: Vòng đời Bài thi, Autosave, C
           ]),
         },
         submission: {
-          create: vi.fn().mockResolvedValueOnce({
-            id: 'sub-graded',
-            score: 8.0,
-            correctCount: 4,
-            totalQuestions: 5,
-            submittedAt: new Date(),
-          }),
+          create: createSubmission,
         },
         participant: {
           update: vi.fn().mockResolvedValueOnce({}),
@@ -258,6 +260,10 @@ describe('Kịch bản 9, 10, 11, 12, 14, 15: Vòng đời Bài thi, Autosave, C
     expect(res.body.submission.score).toBe(8.0)
     expect(res.body.submission.correctCount).toBe(4)
     expect(res.body.submission.totalQuestions).toBe(5)
+    // Điểm do server tự tính, không phải giá trị mock trả về
+    expect(createSubmission).toHaveBeenCalledWith({
+      data: expect.objectContaining({ score: 8, correctCount: 4, totalQuestions: 5, pendingEssays: 0 }),
+    })
   })
 
   it('14 & 15. Server quản lý thời gian thi chính xác, không tin đồng hồ client', async () => {

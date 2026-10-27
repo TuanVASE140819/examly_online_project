@@ -32,4 +32,34 @@ export class SubmissionsController {
       next(err)
     }
   }
+
+  static async getParticipantSubmission(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await SubmissionsService.getParticipantSubmission(
+        req.user!.sub,
+        req.user!.role,
+        req.params['examId']!,
+        req.params['participantId']!
+      )
+      return res.json(result)
+    } catch (err) {
+      next(err)
+    }
+  }
+
+  static async gradeEssay(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await SubmissionsService.gradeEssay(
+        req.user!.sub,
+        req.user!.role,
+        req.params['examId']!,
+        req.params['participantId']!,
+        req.params['questionId']!,
+        req.body
+      )
+      return res.json(result)
+    } catch (err) {
+      next(err)
+    }
+  }
 }

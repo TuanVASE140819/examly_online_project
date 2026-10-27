@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CheckCircle2, Download, FileSpreadsheet, FileText, FileUp, ShieldAlert, TriangleAlert, X } from 'lucide-react'
 import type { NewQuestionInput } from '../api/types'
+import { formatPoints } from '../lib/format'
 import { downloadExcelTemplate, downloadTextTemplate, TEXT_TEMPLATE } from '../lib/importTemplates'
 import { MAX_IMPORT_QUESTIONS, parseQuestionFile, toNewQuestionInput, type ParseResult } from '../lib/questionImport'
 
@@ -122,7 +123,8 @@ export function ImportQuestionsModal({ examName, existingCount, onClose, onImpor
               </strong>
               <p>
                 Dòng đầu là tiêu đề cột: <b>Chủ đề</b> (không bắt buộc), <b>Câu hỏi</b>, <b>A</b>, <b>B</b>, <b>C</b>, <b>D</b> (thêm E, F nếu cần),{' '}
-                <b>Đáp án đúng</b> (ghi chữ cái A–F). Mỗi dòng tiếp theo là một câu hỏi.
+                <b>Đáp án đúng</b> (ghi chữ cái A–F), <b>Điểm</b> (không bắt buộc, mặc định 1). Mỗi dòng tiếp theo là một câu hỏi; dòng để trống phương
+                án và đáp án là câu tự luận.
               </p>
               <button type="button" className="text-link" onClick={() => void downloadExcelTemplate()}>
                 <Download size={14} /> Tải file mẫu Excel
@@ -134,7 +136,8 @@ export function ImportQuestionsModal({ examName, existingCount, onClose, onImpor
               </strong>
               <p>
                 Mỗi câu bắt đầu bằng <b>Câu 1:</b>, phương án <b>A.</b> <b>B.</b>... Đáp án đúng: dòng <b>Đáp án: B</b>, dấu <b>*</b> trước phương án, gạch
-                chân/in đậm phương án (Word), hoặc bảng đáp án cuối file <b>Đáp án: 1A 2C 3B</b>.
+                chân/in đậm phương án (Word), hoặc bảng đáp án cuối file <b>Đáp án: 1A 2C 3B</b>. Câu không có phương án là câu tự luận; ghi số điểm
+                dạng <b>Câu 4 (2 điểm):</b>.
               </p>
               <button type="button" className="text-link" onClick={downloadTextTemplate}>
                 <Download size={14} /> Tải file mẫu (.txt)
@@ -172,18 +175,22 @@ export function ImportQuestionsModal({ examName, existingCount, onClose, onImpor
                     <div className="question-item-head">
                       <span className="question-number">CÂU {i + 1}</span>
                       <span className="topic-chip">{q.topic || 'Tổng quát'}</span>
+                      {q.type === 'ESSAY' && <span className="type-chip">Tự luận</span>}
+                      <span className="points-chip">{formatPoints(q.points)} điểm</span>
                       <span className="muted">{q.source}</span>
                     </div>
                     <p>{q.prompt}</p>
-                    <ul className="question-options">
-                      {q.options.map((o, j) => (
-                        <li key={j} className={j === q.correctIndex ? 'correct' : ''}>
-                          <span className="option-letter">{String.fromCharCode(65 + j)}</span>
-                          <span>{o}</span>
-                          {j === q.correctIndex && <CheckCircle2 size={15} />}
-                        </li>
-                      ))}
-                    </ul>
+                    {q.type === 'MULTIPLE_CHOICE' && (
+                      <ul className="question-options">
+                        {q.options.map((o, j) => (
+                          <li key={j} className={j === q.correctIndex ? 'correct' : ''}>
+                            <span className="option-letter">{String.fromCharCode(65 + j)}</span>
+                            <span>{o}</span>
+                            {j === q.correctIndex && <CheckCircle2 size={15} />}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
                 ))}
               </ol>

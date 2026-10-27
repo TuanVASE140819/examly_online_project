@@ -81,12 +81,20 @@ npm run dev
 
 Mọi người dùng phải **đăng nhập** trước; vai trò (Giáo viên / Học sinh) được xác định từ tài khoản. Hệ thống không có sẵn tài khoản hay phòng thi nào — tạo tài khoản ở tab **Đăng ký** trên màn hình đăng nhập (chọn vai trò Giáo viên hoặc Học sinh).
 
+### Câu hỏi trắc nghiệm và tự luận
+
+Khi **Thêm câu hỏi**, giáo viên chọn loại **Trắc nghiệm** (2–6 phương án, đúng 1 đáp án) hoặc **Tự luận** (học sinh tự viết câu trả lời), và đặt **số điểm** cho từng câu (mặc định 1). Điểm bài thi quy về thang 10 theo tỷ lệ điểm đạt được trên tổng điểm của đề.
+
+- Học sinh gõ câu trả lời tự luận vào ô văn bản; bài làm tự lưu lên máy chủ khi ngừng gõ và được lưu nốt trước khi nộp.
+- Khi nộp bài, phần trắc nghiệm được chấm ngay. Nếu còn câu tự luận chưa chấm, bài ở trạng thái **Chờ chấm** (chưa có điểm chính thức, không tính vào điểm trung bình). Câu tự luận bỏ trống tính 0 điểm, không cần chấm.
+- Giáo viên bấm **Chấm bài** ở bảng thí sinh để đọc bài làm (kèm phương án học sinh chọn ở phần trắc nghiệm) và nhập điểm từng câu tự luận (từ 0 đến số điểm của câu, có thể chấm lại). Chấm xong câu cuối cùng, điểm chính thức hiện ngay trên màn hình giáo viên và học sinh.
+
 ### Nhập đề thi từ file
 
-Giáo viên bấm **Nhập từ file** (khung "Đề thi") hoặc **Tạo & nhập đề từ file** khi tạo phòng. File được đọc trên trình duyệt để xem trước và báo lỗi theo từng dòng/câu, chỉ lưu khi bấm nhập. Có thể chọn *thêm vào cuối đề* hoặc *thay thế toàn bộ đề*. Tối đa 300 câu mỗi lần, mỗi câu 2–6 phương án và đúng 1 đáp án đúng.
+Giáo viên bấm **Nhập từ file** (khung "Đề thi") hoặc **Tạo & nhập đề từ file** khi tạo phòng. File được đọc trên trình duyệt để xem trước và báo lỗi theo từng dòng/câu, chỉ lưu khi bấm nhập. Có thể chọn *thêm vào cuối đề* hoặc *thay thế toàn bộ đề*. Tối đa 300 câu mỗi lần; câu trắc nghiệm có 2–6 phương án và đúng 1 đáp án đúng, câu không có phương án nào là câu tự luận.
 
-- **Excel (.xlsx) / CSV:** dòng tiêu đề gồm `Chủ đề` (không bắt buộc), `Câu hỏi`, `A`, `B`, `C`, `D` (thêm `E`, `F` nếu cần), `Đáp án đúng` (chữ cái A–F). CSV lưu từ Excel tiếng Việt (bảng mã Windows-1258, dấu `;`) cũng đọc được.
-- **Word (.docx) / TXT:** mỗi câu bắt đầu bằng `Câu 1:`, phương án `A.` `B.`... (có thể nhiều phương án trên một dòng). Đáp án đúng ghi bằng dòng `Đáp án: B`, dấu `*` trước phương án, gạch chân/in đậm phương án (Word), hoặc bảng đáp án cuối file `Đáp án: 1A 2C 3B`. Hỗ trợ cả danh sách đánh số tự động của Word.
+- **Excel (.xlsx) / CSV:** dòng tiêu đề gồm `Chủ đề` (không bắt buộc), `Câu hỏi`, `A`, `B`, `C`, `D` (thêm `E`, `F` nếu cần), `Đáp án đúng` (chữ cái A–F), `Điểm` (không bắt buộc, mặc định 1). Dòng để trống phương án và đáp án là câu tự luận. CSV lưu từ Excel tiếng Việt (bảng mã Windows-1258, dấu `;`) cũng đọc được.
+- **Word (.docx) / TXT:** mỗi câu bắt đầu bằng `Câu 1:`, phương án `A.` `B.`... (có thể nhiều phương án trên một dòng). Đáp án đúng ghi bằng dòng `Đáp án: B`, dấu `*` trước phương án, gạch chân/in đậm phương án (Word), hoặc bảng đáp án cuối file `Đáp án: 1A 2C 3B`. Câu không có phương án là câu tự luận; ghi số điểm ngay sau số câu, ví dụ `Câu 4 (2 điểm):`. Hỗ trợ cả danh sách đánh số tự động của Word.
 - File mẫu Excel và TXT tải được ngay trong hộp thoại nhập đề. Chưa hỗ trợ định dạng cũ `.xls`/`.doc` và hình ảnh trong câu hỏi.
 
 ### Học sinh cùng mạng / khác mạng
@@ -103,7 +111,7 @@ Học sinh ở mạng khác (ví dụ ở nhà) chỉ vào được khi trang we
 
 ## 4. Kiểm thử Tự động (Automated Test Suite)
 
-Dự án bao gồm 41 kiểm thử, bao phủ các kịch bản:
+Dự án bao gồm 48 kiểm thử, bao phủ các kịch bản:
 - Đăng nhập hợp lệ và không hợp lệ.
 - Student không thể tạo kỳ thi (RBAC).
 - Teacher không thể xem/sửa kỳ thi của người khác.
@@ -122,6 +130,7 @@ Dự án bao gồm 41 kiểm thử, bao phủ các kịch bản:
 - Thí sinh chưa được duyệt hoặc kỳ thi chưa bắt đầu thì không nộp được bài.
 - Kết thúc kỳ thi (thủ công hoặc tự động khi hết giờ) sẽ tự nộp bài cho thí sinh đang làm và đánh dấu vắng thí sinh chưa vào thi.
 - Nhập đề từ file: thêm vào cuối đề / thay thế đề, bắt buộc đúng 1 đáp án đúng mỗi câu, khóa khi kỳ thi đã bắt đầu, chặn giáo viên khác.
+- Câu hỏi tự luận: điểm theo trọng số từng câu, bài có câu tự luận chưa chấm ở trạng thái chờ chấm, giáo viên chấm (không vượt số điểm của câu, chỉ chấm câu tự luận của bài đã nộp, chặn giáo viên khác và học sinh).
 - Chế độ mạng: phòng "chỉ cùng mạng" chặn học sinh khác mạng với giáo viên (so IP công khai, IPv6 theo dải /64) khi tham gia và khi làm bài; giáo viên đổi được chế độ khi đang thi, không đổi được khi kỳ thi đã kết thúc hoặc phòng của giáo viên khác.
 
 Chạy kiểm thử (vitest 5 yêu cầu **Node.js ≥ 22.12**):
@@ -149,7 +158,7 @@ npm test
 5. **Làm bài & Giám sát:**
    - Mỗi lần chọn đáp án được **Autosave** lên máy chủ; tải lại trang (F5) vẫn quay về đúng bài với đáp án đã chọn.
    - Chuyển tab hoặc ẩn trình duyệt: số lượt rời trang cập nhật ngay trên màn hình Giáo viên.
-   - Bấm **Nộp bài**: máy chủ chấm điểm và trả về kết quả chính thức; Giáo viên thấy điểm ngay trong bảng.
+   - Bấm **Nộp bài**: máy chủ chấm điểm và trả về kết quả chính thức; Giáo viên thấy điểm ngay trong bảng. Đề có câu tự luận thì bài hiện **Chờ chấm** cho tới khi giáo viên bấm **Chấm bài** và chấm xong.
 6. **Kết thúc:**
    - Giáo viên nhấn **Kết thúc kỳ thi**, hoặc máy chủ **tự động kết thúc khi hết giờ** (kể cả sau khi khởi động lại server).
    - Bài đang làm dở được tự động nộp và chấm điểm; thí sinh đã duyệt nhưng chưa vào thi bị đánh dấu **Vắng thi**.

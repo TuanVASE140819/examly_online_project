@@ -10,6 +10,7 @@ import {
   Flag,
   Globe,
   ListChecks,
+  PenLine,
   Play,
   Plus,
   RefreshCw,
@@ -26,10 +27,11 @@ import {
 } from 'lucide-react'
 import { api, toStudentStatus } from '../api/client'
 import { socketClient } from '../api/socket'
-import type { AuthUser, ExamStatus, NewQuestionInput, Room, Student, StudentStatus, TeacherQuestion } from '../api/types'
+import type { AuthUser, ExamStatus, NewQuestionInput, QuestionType, Room, Student, StudentStatus, TeacherQuestion } from '../api/types'
 import { ActivityItem, EmptyState, Stat } from '../components/common'
+import { GradingModal } from '../components/GradingModal'
 import { ImportQuestionsModal } from '../components/ImportQuestionsModal'
-import { examStatusLabels, formatCountdown, formatScore, formatTime, initials, statusLabels } from '../lib/format'
+import { examStatusLabels, formatCountdown, formatPoints, formatScore, formatTime, initials, statusLabels } from '../lib/format'
 
 type ActivityKind = 'join' | 'warning' | 'submit' | 'exam'
 
@@ -49,6 +51,15 @@ const activityStyle: Record<ActivityKind, { tone: string; icon: JSX.Element }> =
 }
 
 const SELECTED_EXAM_KEY = 'examly_teacher_exam'
+
+// Ví dụ: "8 câu trắc nghiệm • 2 câu tự luận • tổng 12 điểm, quy về thang 10"
+function questionSummary(questions: TeacherQuestion[]) {
+  const essays = questions.filter((q) => q.type === 'ESSAY').length
+  const total = questions.reduce((sum, q) => sum + q.points, 0)
+  const parts = [`${questions.length - essays} câu trắc nghiệm`]
+  if (essays) parts.push(`${essays} câu tự luận`)
+  return `${parts.join(' • ')} • tổng ${formatPoints(total)} điểm, quy về thang 10.`
+}
 
 // Giáo viên mở trang ngay trên máy chủ thì IP là loopback, không có ý nghĩa để hiển thị
 const isLoopback = (ip: string) => ip === '::1' || ip.startsWith('127.')
@@ -71,6 +82,7 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
   const [showQuestionForm, setShowQuestionForm] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [confirmFinish, setConfirmFinish] = useState(false)
+  const [grading, setGrading] = useState<Student | null>(null)
   const [busy, setBusy] = useState(false)
   // Chỉ dùng để render lại mỗi giây cho đồng hồ đếm ngược
   const [, setTick] = useState(0)
@@ -89,12 +101,15 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
   const counts = useMemo(() => {
     const count = (status: StudentStatus) => students.filter((s) => s.status === status).length
     const submitted = students.filter((s) => s.status === 'submitted')
-    const average = submitted.length ? submitted.reduce((sum, s) => sum + (s.score ?? 0), 0) / submitted.length : null
+    // Bài còn câu tự luận chưa chấm chưa có điểm chính thức nên không tính vào điểm trung bình
+    const graded = submitted.filter((s) => s.score !== undefined && !s.pendingEssays)
+    const average = graded.length ? graded.reduce((sum, s) => sum + (s.score ?? 0), 0) / graded.length : null
     return {
       pending: count('pending'),
       ready: count('approved') + count('in_progress'),
       inProgress: count('in_progress'),
       submitted: submitted.length,
+      awaitingGrading: submitted.length - graded.length,
       average,
       warnings: students.reduce((sum, s) => sum + s.tabWarnings, 0),
     }
@@ -185,13 +200,24 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
       log({ kind: 'warning', title: 'Cảnh báo giám sát', detail: `${w.displayName} rời khỏi trang thi (lần ${w.tabWarnings})` })
     }
 
-    const onSubmitted = (p: { examId: string; participantId: string; score: number | null }) => {
+    const onSubmitted = (p: { examId: string; participantId: string; score: number | null; pendingEssays?: number }) => {
       if (!isCurrent(p)) return
       const name = studentsRef.current.find((s) => s.id === p.participantId)?.name ?? 'Thí sinh'
       setStudents((prev) =>
-        prev.map((s) => (s.id === p.participantId ? { ...s, status: 'submitted', score: p.score ?? undefined } : s))
+        prev.map((s) =>
+          s.id === p.participantId ? { ...s, status: 'submitted', score: p.score ?? undefined, pendingEssays: p.pendingEssays ?? 0 } : s
+        )
       )
-      log({ kind: 'submit', title: 'Bài thi đã nộp', detail: `${name} đạt ${formatScore(p.score)}/10 điểm` })
+      log({
+        kind: 'submit',
+        title: 'Bài thi đã nộp',
+        detail: p.pendingEssays ? `${name} đã nộp bài, chờ chấm ${p.pendingEssays} câu tự luận` : `${name} đạt ${formatScore(p.score)}/10 điểm`,
+      })
+    }
+
+    const onGraded = (p: { examId: string; participantId: string; score: number | null; pendingEssays: number }) => {
+      if (!isCurrent(p)) return
+      setStudents((prev) => prev.map((s) => (s.id === p.participantId ? { ...s, score: p.score ?? undefined, pendingEssays: p.pendingEssays } : s)))
     }
 
     const onExamStarted = (ex: { examId: string; startsAt: string; endsAt: string }) => {
@@ -210,6 +236,7 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
     socketClient.on('participant:status-changed', onStatusChanged)
     socketClient.on('proctoring:warning', onWarning)
     socketClient.on('participant:submitted', onSubmitted)
+    socketClient.on('participant:graded', onGraded)
     socketClient.on('exam:started', onExamStarted)
     socketClient.on('exam:ended', onExamEnded)
 
@@ -218,6 +245,7 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
       socketClient.off('participant:status-changed', onStatusChanged)
       socketClient.off('proctoring:warning', onWarning)
       socketClient.off('participant:submitted', onSubmitted)
+      socketClient.off('participant:graded', onGraded)
       socketClient.off('exam:started', onExamStarted)
       socketClient.off('exam:ended', onExamEnded)
     }
@@ -396,7 +424,13 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
               tone="violet"
               label="Đã nộp bài"
               value={String(counts.submitted).padStart(2, '0')}
-              note={counts.average === null ? 'Chưa có bài nộp' : `Điểm trung bình ${formatScore(Math.round(counts.average * 10) / 10)}/10`}
+              note={
+                counts.average === null
+                  ? counts.awaitingGrading
+                    ? `${counts.awaitingGrading} bài chờ chấm tự luận`
+                    : 'Chưa có bài nộp'
+                  : `Điểm trung bình ${formatScore(Math.round(counts.average * 10) / 10)}/10${counts.awaitingGrading ? ` • ${counts.awaitingGrading} chờ chấm` : ''}`
+              }
             />
           </section>
 
@@ -550,7 +584,7 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
               <div>
                 <div className="section-kicker">ĐỀ THI</div>
                 <h2>
-                  Câu hỏi trắc nghiệm <span className="count-badge">{questions.length}</span>
+                  Câu hỏi <span className="count-badge">{questions.length}</span>
                 </h2>
               </div>
               <div className="table-actions">
@@ -575,6 +609,8 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
                     <div className="question-item-head">
                       <span className="question-number">CÂU {i + 1}</span>
                       <span className="topic-chip">{q.topic}</span>
+                      {q.type === 'ESSAY' && <span className="type-chip">Tự luận</span>}
+                      <span className="points-chip">{formatPoints(q.points)} điểm</span>
                       {editable && (
                         <button className="icon-button small danger" title="Xóa câu hỏi" onClick={() => removeQuestion(q)}>
                           <Trash2 size={15} />
@@ -582,19 +618,24 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
                       )}
                     </div>
                     <p>{q.text}</p>
-                    <ul className="question-options">
-                      {q.options.map((o, j) => (
-                        <li key={o.id} className={o.isCorrect ? 'correct' : ''}>
-                          <span className="option-letter">{String.fromCharCode(65 + j)}</span>
-                          <span>{o.text}</span>
-                          {o.isCorrect && <CheckCircle2 size={15} />}
-                        </li>
-                      ))}
-                    </ul>
+                    {q.type === 'ESSAY' ? (
+                      <p className="essay-note">Học sinh tự viết câu trả lời — bạn chấm điểm sau khi học sinh nộp bài.</p>
+                    ) : (
+                      <ul className="question-options">
+                        {q.options.map((o, j) => (
+                          <li key={o.id} className={o.isCorrect ? 'correct' : ''}>
+                            <span className="option-letter">{String.fromCharCode(65 + j)}</span>
+                            <span>{o.text}</span>
+                            {o.isCorrect && <CheckCircle2 size={15} />}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
                 ))}
               </ol>
             )}
+            {questions.length > 0 && <p className="panel-note">{questionSummary(questions)}</p>}
             {!editable && <p className="panel-note">Đề thi đã khóa vì kỳ thi đã bắt đầu hoặc kết thúc.</p>}
           </section>
 
@@ -612,7 +653,7 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
                 </button>
               </div>
             </div>
-            <StudentTable students={students} examStatus={room.status} onDecide={decide} />
+            <StudentTable students={students} examStatus={room.status} onDecide={decide} onOpenSubmission={setGrading} />
           </section>
         </>
       )}
@@ -622,6 +663,19 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
       </div>
 
       {showCreate && <CreateRoomModal onClose={() => setShowCreate(false)} onCreate={createRoom} />}
+      {grading && room && (
+        <GradingModal
+          examId={room.id}
+          student={grading}
+          notify={notify}
+          onClose={() => setGrading(null)}
+          onGraded={(participantId, submission) =>
+            setStudents((prev) =>
+              prev.map((s) => (s.id === participantId ? { ...s, score: submission.score ?? undefined, pendingEssays: submission.pendingEssays } : s))
+            )
+          }
+        />
+      )}
       {showQuestionForm && <QuestionFormModal onClose={() => setShowQuestionForm(false)} onSave={addQuestion} />}
       {showImport && room && (
         <ImportQuestionsModal examName={room.name} existingCount={questions.length} onClose={() => setShowImport(false)} onImport={importQuestions} />
@@ -656,10 +710,12 @@ function StudentTable({
   students,
   examStatus,
   onDecide,
+  onOpenSubmission,
 }: {
   students: Student[]
   examStatus: ExamStatus
   onDecide: (id: string, decision: 'APPROVED' | 'REJECTED' | 'PENDING') => void
+  onOpenSubmission: (student: Student) => void
 }) {
   const locked = examStatus === 'ended' || examStatus === 'cancelled'
 
@@ -702,10 +758,22 @@ function StudentTable({
                   {s.tabWarnings} lượt
                 </span>
               </td>
-              <td className="score-cell">{s.status === 'submitted' ? `${formatScore(s.score)}/10` : '—'}</td>
+              <td className="score-cell">
+                {s.status !== 'submitted' ? '—' : s.pendingEssays ? <span className="status-pill pending">Chờ chấm</span> : `${formatScore(s.score)}/10`}
+              </td>
               <td>
                 <div className="row-actions">
-                  {locked || s.status === 'submitted' || s.status === 'absent' ? (
+                  {s.status === 'submitted' ? (
+                    <button className={s.pendingEssays ? 'approve-button' : 'plain-action'} onClick={() => onOpenSubmission(s)}>
+                      {s.pendingEssays ? (
+                        <>
+                          <PenLine size={14} /> Chấm bài
+                        </>
+                      ) : (
+                        'Xem bài'
+                      )}
+                    </button>
+                  ) : locked || s.status === 'absent' ? (
                     <span className="muted">—</span>
                   ) : s.status === 'pending' ? (
                     <>
@@ -838,8 +906,10 @@ function CreateRoomModal({
 const emptyOptions = () => ['', '', '', '']
 
 function QuestionFormModal({ onClose, onSave }: { onClose: () => void; onSave: (input: NewQuestionInput, keepOpen: boolean) => Promise<void> }) {
+  const [type, setType] = useState<QuestionType>('MULTIPLE_CHOICE')
   const [topic, setTopic] = useState('')
   const [prompt, setPrompt] = useState('')
+  const [points, setPoints] = useState('1')
   const [options, setOptions] = useState<string[]>(emptyOptions)
   const [correct, setCorrect] = useState(0)
   const [error, setError] = useState('')
@@ -854,11 +924,16 @@ function QuestionFormModal({ onClose, onSave }: { onClose: () => void; onSave: (
 
   const save = async (keepOpen: boolean) => {
     const texts = options.map((o) => o.trim())
+    const pointValue = Number(points.replace(',', '.'))
     if (prompt.trim().length < 2) {
       setError('Nội dung câu hỏi tối thiểu 2 ký tự.')
       return
     }
-    if (texts.some((t) => !t)) {
+    if (!(pointValue > 0 && pointValue <= 100)) {
+      setError('Số điểm phải lớn hơn 0 và không quá 100.')
+      return
+    }
+    if (type === 'MULTIPLE_CHOICE' && texts.some((t) => !t)) {
       setError('Vui lòng nhập đầy đủ nội dung các phương án.')
       return
     }
@@ -867,10 +942,11 @@ function QuestionFormModal({ onClose, onSave }: { onClose: () => void; onSave: (
     try {
       await onSave(
         {
+          type,
           topic: topic.trim() || 'Tổng quát',
           prompt: prompt.trim(),
-          points: 1,
-          options: texts.map((text, i) => ({ text, isCorrect: i === correct, position: i })),
+          points: pointValue,
+          options: type === 'ESSAY' ? [] : texts.map((text, i) => ({ text, isCorrect: i === correct, position: i })),
         },
         keepOpen
       )
@@ -898,19 +974,38 @@ function QuestionFormModal({ onClose, onSave }: { onClose: () => void; onSave: (
         <div className="modal-heading">
           <div>
             <div className="section-kicker">SOẠN ĐỀ THI</div>
-            <h2>Thêm câu hỏi trắc nghiệm</h2>
+            <h2>Thêm câu hỏi</h2>
           </div>
           <button type="button" className="icon-button" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
-        <p className="modal-copy">Chọn đáp án đúng bằng nút tròn bên trái. Đáp án đúng không bao giờ được gửi tới học sinh.</p>
-        <label>Chủ đề</label>
-        <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Ví dụ: Hàm số (để trống sẽ là Tổng quát)" />
+        <div className="duration-options question-type-options" role="radiogroup" aria-label="Loại câu hỏi">
+          {(['MULTIPLE_CHOICE', 'ESSAY'] as const).map((t) => (
+            <button type="button" key={t} role="radio" aria-checked={type === t} className={type === t ? 'selected' : ''} onClick={() => setType(t)}>
+              {t === 'ESSAY' ? 'Tự luận' : 'Trắc nghiệm'}
+            </button>
+          ))}
+        </div>
+        <p className="modal-copy">
+          {type === 'ESSAY'
+            ? 'Học sinh tự viết câu trả lời. Sau khi học sinh nộp bài, bạn chấm điểm câu này ở mục Danh sách học sinh.'
+            : 'Chọn đáp án đúng bằng nút tròn bên trái. Đáp án đúng không bao giờ được gửi tới học sinh.'}
+        </p>
+        <div className="form-row">
+          <div>
+            <label>Chủ đề</label>
+            <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Ví dụ: Hàm số (để trống sẽ là Tổng quát)" />
+          </div>
+          <div className="points-field">
+            <label>Số điểm</label>
+            <input type="number" min={0.25} max={100} step={0.25} value={points} onChange={(e) => setPoints(e.target.value)} />
+          </div>
+        </div>
         <label>Nội dung câu hỏi</label>
         <textarea autoFocus value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Nhập nội dung câu hỏi..." />
-        <label>Các phương án</label>
-        {options.map((option, i) => (
+        {type === 'MULTIPLE_CHOICE' && <label>Các phương án</label>}
+        {type === 'MULTIPLE_CHOICE' && options.map((option, i) => (
           <div key={i} className="option-row">
             <input
               type="radio"
@@ -928,7 +1023,7 @@ function QuestionFormModal({ onClose, onSave }: { onClose: () => void; onSave: (
             )}
           </div>
         ))}
-        {options.length < 6 && (
+        {type === 'MULTIPLE_CHOICE' && options.length < 6 && (
           <button type="button" className="text-link" onClick={() => setOptions((prev) => [...prev, ''])}>
             <Plus size={14} /> Thêm phương án
           </button>

@@ -1,13 +1,15 @@
-import type { NewQuestionInput } from '../api/types'
+import type { NewQuestionInput, QuestionType } from '../api/types'
 
-// Đọc đề thi trắc nghiệm từ file Excel (.xlsx), CSV, Word (.docx) hoặc văn bản (.txt) ngay trên trình duyệt.
+// Đọc đề thi (trắc nghiệm và tự luận) từ file Excel (.xlsx), CSV, Word (.docx) hoặc văn bản (.txt) ngay trên trình duyệt.
 
 export interface ParsedQuestion {
   source: string // vị trí trong file để báo lỗi/xem trước, ví dụ "Dòng 5" hoặc "Câu 3"
+  type: QuestionType
   topic: string
   prompt: string
-  options: string[]
-  correctIndex: number
+  points: number
+  options: string[] // câu tự luận: mảng rỗng
+  correctIndex: number // câu tự luận: -1
 }
 
 export interface ParseResult {
@@ -56,9 +58,10 @@ export async function parseQuestionFile(file: File): Promise<ParseResult> {
 
 export function toNewQuestionInput(q: ParsedQuestion): NewQuestionInput {
   return {
+    type: q.type,
     topic: q.topic || 'Tổng quát',
     prompt: q.prompt,
-    points: 1,
+    points: q.points,
     options: q.options.map((text, i) => ({ text, isCorrect: i === q.correctIndex, position: i })),
   }
 }
@@ -178,6 +181,7 @@ function countListAncestors(el: Element) {
 const PROMPT_HEADERS = ['cau hoi', 'noi dung', 'noi dung cau hoi', 'de bai', 'question']
 const ANSWER_HEADERS = ['dap an', 'dap an dung', 'dap an chinh xac', 'answer', 'correct', 'correct answer']
 const TOPIC_HEADERS = ['chu de', 'topic', 'chuong', 'phan']
+const POINTS_HEADERS = ['diem', 'so diem', 'thang diem', 'points', 'score']
 const OPTION_HEADER_RE = /^(?:phuong an|lua chon|dap an|option|pa)?\s*([a-f])$/
 
 function parseRows(rows: string[][]): Omit<ParseResult, 'format'> {
@@ -196,6 +200,7 @@ function parseRows(rows: string[][]): Omit<ParseResult, 'format'> {
   const promptCol = header.findIndex((h) => PROMPT_HEADERS.includes(h))
   const answerCol = header.findIndex((h) => ANSWER_HEADERS.includes(h))
   const topicCol = header.findIndex((h) => TOPIC_HEADERS.includes(h))
+  const pointsCol = header.findIndex((h) => POINTS_HEADERS.includes(h))
   const optionCols: { letter: string; col: number }[] = []
   header.forEach((h, col) => {
     const m = OPTION_HEADER_RE.exec(h)
@@ -203,8 +208,10 @@ function parseRows(rows: string[][]): Omit<ParseResult, 'format'> {
   })
   optionCols.sort((a, b) => a.letter.localeCompare(b.letter))
 
-  if (optionCols.length < 2) errors.push('Thiếu cột phương án. Cần ít nhất 2 cột A, B (tối đa đến F).')
-  if (answerCol < 0) errors.push('Thiếu cột "Đáp án đúng".')
+  // Không có cột phương án lẫn cột đáp án: file chỉ gồm câu tự luận
+  const hasOptions = optionCols.length >= 2
+  if (!hasOptions && answerCol >= 0) errors.push('Thiếu cột phương án. Cần ít nhất 2 cột A, B (tối đa đến F).')
+  if (hasOptions && answerCol < 0) errors.push('Thiếu cột "Đáp án đúng".')
   if (errors.length) return { questions, errors }
 
   let lastTopic = ''
@@ -218,7 +225,7 @@ function parseRows(rows: string[][]): Omit<ParseResult, 'format'> {
     lastTopic = topic
     const options = optionCols.map((o) => ({ letter: o.letter, text: cell(o.col) }))
     const correctLetter = resolveAnswer(cell(answerCol), options)
-    const draft = { source, topic, prompt: cell(promptCol), options, correctLetter, answerRaw: cell(answerCol) }
+    const draft = { source, topic, prompt: cell(promptCol), options, correctLetter, answerRaw: cell(answerCol), pointsRaw: cell(pointsCol) }
     const result = finalize(draft)
     if (typeof result === 'string') errors.push(result)
     else questions.push(result)
@@ -249,6 +256,8 @@ const ANSWER_RE = /^(?:dap an(?: dung)?|answer|d\/a)\s*[:.\-]?\s*\(?([a-f])\)?\s
 const ANSWER_HEADING_RE = /^(?:bang )?(?:dap an|answer key|answers)\s*[:.]?$/
 const ANSWER_PAIR_RE = /(\d+)\s*[-.:)]?\s*([a-f])(?![a-z])/g
 const TOPIC_RE = /^(?:chu de|topic|phan|chuong)\s*(?:[0-9ivx]+)?\s*[:.\-]\s*/
+// Số điểm ghi ngay sau số câu: "Câu 5 (2 điểm): ..." hoặc "Câu 5: (1,5đ) ..."
+const POINTS_PREFIX_RE = /^\(\s*(\d+(?:[.,]\d+)?)\s*(?:diem|d)\s*\)\s*[:.\-–]?\s*/
 
 interface DraftOption {
   letter: string
@@ -265,6 +274,7 @@ interface Draft {
   options: DraftOption[]
   correctLetter?: string | null
   answerRaw?: string
+  pointsRaw?: string
 }
 
 function parseLines(lines: SourceLine[]): Omit<ParseResult, 'format'> {
@@ -281,7 +291,15 @@ function parseLines(lines: SourceLine[]): Omit<ParseResult, 'format'> {
   const beginQuestion = (number: number | undefined, prompt: string): Draft => {
     if (current) drafts.push(current)
     const n = number ?? drafts.length + 1
-    return { source: `Câu ${n}`, number: n, topic, prompt, options: [] }
+    const points = POINTS_PREFIX_RE.exec(fold(prompt))
+    return {
+      source: `Câu ${n}`,
+      number: n,
+      topic,
+      prompt: points ? prompt.slice(points[0].length).trim() : prompt,
+      pointsRaw: points?.[1],
+      options: [],
+    }
   }
 
   for (const line of lines) {
@@ -406,7 +424,14 @@ function finalize(draft: Draft): ParsedQuestion | string {
   if (!prompt) return `${source}: thiếu nội dung câu hỏi.`
   if (prompt.length > 4000) return `${source}: nội dung câu hỏi quá dài (tối đa 4000 ký tự).`
 
+  const points = parsePoints(draft.pointsRaw)
+  if (points === null) return `${source}: số điểm "${draft.pointsRaw}" không hợp lệ (cần lớn hơn 0 và tối đa 100).`
+
   const filled = draft.options.filter((o) => o.text.trim())
+  // Không có phương án và không ghi đáp án: câu tự luận
+  if (!filled.length && !draft.correctLetter && !draft.answerRaw) {
+    return { source, type: 'ESSAY', topic: draft.topic.trim(), prompt, points, options: [], correctIndex: -1 }
+  }
   if (filled.length < 2) return `${source}: cần ít nhất 2 phương án (A, B...).`
   if (filled.length > MAX_OPTIONS) return `${source}: tối đa ${MAX_OPTIONS} phương án (A–F).`
   if (filled.some((o) => o.text.length > 1000)) return `${source}: có phương án quá dài (tối đa 1000 ký tự).`
@@ -421,5 +446,12 @@ function finalize(draft: Draft): ParsedQuestion | string {
   const correctIndex = filled.findIndex((o) => o.letter === letter)
   if (correctIndex < 0) return `${source}: đáp án đúng ${letter} trỏ tới phương án không có nội dung.`
 
-  return { source, topic: draft.topic.trim(), prompt, options: filled.map((o) => o.text.trim()), correctIndex }
+  return { source, type: 'MULTIPLE_CHOICE', topic: draft.topic.trim(), prompt, points, options: filled.map((o) => o.text.trim()), correctIndex }
+}
+
+// Để trống thì mặc định 1 điểm; chấp nhận dấu phẩy thập phân "1,5"
+function parsePoints(raw: string | undefined): number | null {
+  if (!raw?.trim()) return 1
+  const value = Number(raw.trim().replace(',', '.'))
+  return value > 0 && value <= 100 ? value : null
 }

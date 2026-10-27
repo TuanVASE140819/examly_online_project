@@ -88,8 +88,14 @@ export const socketEmitter = {
   },
 
   // Báo thí sinh đã nộp bài tới giáo viên
-  participantSubmitted(examId: string, payload: { participantId: string; score: number | null; submittedAt: string }) {
+  participantSubmitted(examId: string, payload: { participantId: string; score: number | null; pendingEssays: number; submittedAt: string }) {
     ioInstance?.to(socketRooms.teacher(examId)).emit('participant:submitted', { examId, ...payload })
     ioInstance?.to(socketRooms.participant(payload.participantId)).emit('submission:result', payload)
+  },
+
+  // Giáo viên chấm câu tự luận: cập nhật điểm cho giáo viên và thí sinh
+  submissionGraded(examId: string, payload: { participantId: string; score: number | null; pendingEssays: number }) {
+    ioInstance?.to(socketRooms.teacher(examId)).emit('participant:graded', { examId, ...payload })
+    ioInstance?.to(socketRooms.participant(payload.participantId)).emit('submission:graded', payload)
   },
 }

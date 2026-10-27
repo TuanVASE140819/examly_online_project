@@ -1,7 +1,8 @@
 import { Router } from 'express'
+import { UserRole } from '@prisma/client'
 import { SubmissionsController } from './submissions.controller.js'
-import { saveAnswerSchema, submitExamSchema } from './submissions.schemas.js'
-import { requireAuth, requireExamParticipant } from '../../middleware/auth.js'
+import { gradeEssaySchema, saveAnswerSchema, submitExamSchema } from './submissions.schemas.js'
+import { requireAuth, requireExamParticipant, requireRole } from '../../middleware/auth.js'
 import { requireAllowedNetwork } from '../../middleware/network.js'
 import { validateBody } from '../../middleware/validate.js'
 
@@ -26,4 +27,20 @@ submissionsRoutes.post(
   '/submissions/current/submit',
   validateBody(submitExamSchema),
   SubmissionsController.submitExam
+)
+
+// Giáo viên xem bài làm của thí sinh và chấm câu tự luận
+const teacherAuth = [requireAuth, requireRole(UserRole.TEACHER, UserRole.ADMIN)]
+
+submissionsRoutes.get(
+  '/exams/:examId/participants/:participantId/submission',
+  ...teacherAuth,
+  SubmissionsController.getParticipantSubmission
+)
+
+submissionsRoutes.put(
+  '/exams/:examId/participants/:participantId/answers/:questionId/grade',
+  ...teacherAuth,
+  validateBody(gradeEssaySchema),
+  SubmissionsController.gradeEssay
 )

@@ -1,6 +1,7 @@
 export type Role = 'teacher' | 'student'
 export type StudentStatus = 'pending' | 'approved' | 'in_progress' | 'rejected' | 'submitted' | 'absent'
 export type ExamStatus = 'draft' | 'waiting' | 'scheduled' | 'active' | 'ended' | 'cancelled'
+export type QuestionType = 'MULTIPLE_CHOICE' | 'ESSAY'
 
 export interface Student {
   id: string
@@ -10,6 +11,8 @@ export interface Student {
   joinedAt: string
   tabWarnings: number
   score?: number
+  // Số câu tự luận chờ chấm (điểm chưa chính thức khi > 0)
+  pendingEssays?: number
 }
 
 export interface Room {
@@ -37,6 +40,7 @@ export interface OptionItem {
 
 export interface QuestionItem {
   id: string
+  type: QuestionType
   topic: string
   text: string
   points: number
@@ -53,9 +57,11 @@ export interface TeacherQuestion extends Omit<QuestionItem, 'options'> {
 }
 
 export interface NewQuestionInput {
+  type: QuestionType
   topic: string
   prompt: string
   points: number
+  // Câu tự luận để mảng rỗng
   options: { text: string; isCorrect: boolean; position: number }[]
 }
 
@@ -70,7 +76,10 @@ export interface SubmissionResult {
   score: number | null
   maxScore: number
   correctCount: number
+  // Số câu trắc nghiệm của đề
   totalQuestions: number
+  // Số câu tự luận chờ giáo viên chấm; score = null cho tới khi chấm xong
+  pendingEssays: number
   reason: 'MANUAL' | 'TIMEOUT'
   submittedAt: string
 }
@@ -79,6 +88,7 @@ export interface CurrentSubmissionState {
   submitted: boolean
   submission: SubmissionResult | null
   answers: Record<string, string | null>
+  textAnswers: Record<string, string>
   secondsRemaining: number
   examStatus: string
 }
@@ -96,4 +106,15 @@ export interface StudentSession {
   joinCode: string
   examStatus: ExamStatus
   durationMinutes: number
+}
+
+// Bài làm của một thí sinh dành cho giáo viên xem và chấm tự luận
+export interface GradingQuestion extends TeacherQuestion {
+  answer: { selectedOptionId: string | null; textAnswer: string | null; awardedPoints: number | null } | null
+}
+
+export interface ParticipantSubmissionDetail {
+  participant: { id: string; name: string; className: string; status: StudentStatus }
+  submission: SubmissionResult | null
+  questions: GradingQuestion[]
 }

@@ -128,7 +128,7 @@ export class ParticipantsService {
       orderBy: { joinedAt: 'asc' },
       include: {
         submission: {
-          select: { score: true, submittedAt: true },
+          select: { score: true, submittedAt: true, pendingEssays: true },
         },
         _count: {
           select: {
@@ -151,6 +151,7 @@ export class ParticipantsService {
         joinedAt: p.joinedAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
         tabWarnings: p._count.events,
         score: p.submission?.score ?? undefined,
+        pendingEssays: p.submission?.pendingEssays ?? 0,
       })),
     }
   }
@@ -244,7 +245,7 @@ export class ParticipantsService {
           },
         },
         submission: {
-          select: { score: true, submittedAt: true },
+          select: { score: true, submittedAt: true, pendingEssays: true },
         },
         _count: {
           select: {

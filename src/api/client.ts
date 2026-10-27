@@ -3,6 +3,7 @@ import type {
   CurrentSubmissionState,
   ExamStatus,
   NewQuestionInput,
+  ParticipantSubmissionDetail,
   QuestionItem,
   Room,
   Student,
@@ -57,6 +58,7 @@ function mapExam(e: any): Room {
 function mapTeacherQuestion(q: any): TeacherQuestion {
   return {
     id: q.id,
+    type: q.type ?? 'MULTIPLE_CHOICE',
     topic: q.topic,
     text: q.prompt,
     points: q.points,
@@ -222,6 +224,7 @@ class ApiClient {
       joinedAt: p.joinedAt,
       tabWarnings: p.tabWarnings,
       score: p.score,
+      pendingEssays: p.pendingEssays ?? 0,
     }))
   }
 
@@ -233,6 +236,25 @@ class ApiClient {
   }
 
   // Questions (Teacher)
+  // Chấm bài (giáo viên)
+  async getParticipantSubmission(examId: string, participantId: string): Promise<ParticipantSubmissionDetail> {
+    const res = await this.request<any>(`/exams/${examId}/participants/${participantId}/submission`, {}, 'user')
+    return {
+      participant: { ...res.participant, status: toStudentStatus(res.participant.status) },
+      submission: res.submission,
+      questions: res.questions.map((q: any) => ({ ...mapTeacherQuestion(q), answer: q.answer })),
+    }
+  }
+
+  async gradeEssay(examId: string, participantId: string, questionId: string, points: number): Promise<SubmissionResult> {
+    const res = await this.request<{ submission: SubmissionResult }>(
+      `/exams/${examId}/participants/${participantId}/answers/${questionId}/grade`,
+      { method: 'PUT', body: JSON.stringify({ points }) },
+      'user'
+    )
+    return res.submission
+  }
+
   async getTeacherQuestions(examId: string): Promise<TeacherQuestion[]> {
     const res = await this.request<{ questions: any[] }>(`/exams/${examId}/questions`, {}, 'user')
     return res.questions.map(mapTeacherQuestion)
@@ -297,6 +319,13 @@ class ApiClient {
     await this.request(`/submissions/current/answers/${questionId}`, {
       method: 'PUT',
       body: JSON.stringify({ selectedOptionId }),
+    }, 'participant')
+  }
+
+  async saveTextAnswer(questionId: string, textAnswer: string): Promise<void> {
+    await this.request(`/submissions/current/answers/${questionId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ textAnswer }),
     }, 'participant')
   }
 

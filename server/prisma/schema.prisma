@@ -31,6 +31,11 @@ enum ParticipantStatus {
   ABSENT
 }
 
+enum QuestionType {
+  MULTIPLE_CHOICE
+  ESSAY
+}
+
 enum SubmitReason {
   MANUAL
   TIMEOUT
@@ -81,6 +86,7 @@ model Question {
   id        String   @id @default(uuid()) @db.Uuid
   examId    String   @db.Uuid
   exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  type      QuestionType @default(MULTIPLE_CHOICE)
   topic     String   @default("Tổng quát")
   prompt    String
   position  Int
@@ -137,6 +143,9 @@ model Answer {
   question         Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
   selectedOptionId String?     @db.Uuid
   selectedOption   Option?     @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
+  // Câu tự luận: bài làm của học sinh và điểm giáo viên chấm (null = chưa chấm)
+  textAnswer       String?
+  awardedPoints    Float?
   savedAt          DateTime    @updatedAt
 
   @@unique([participantId, questionId])
@@ -155,7 +164,10 @@ model Submission {
   score          Float?
   maxScore       Float        @default(10.0)
   correctCount   Int          @default(0)
+  // Số câu trắc nghiệm của đề (câu tự luận không tính đúng/sai)
   totalQuestions Int          @default(0)
+  // Số câu tự luận đã làm nhưng giáo viên chưa chấm; score = null cho tới khi về 0
+  pendingEssays  Int          @default(0)
   gradedAt       DateTime?
 
   @@index([examId, submittedAt])

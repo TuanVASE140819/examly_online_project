@@ -18,7 +18,7 @@ import {
 import { api, toStudentStatus } from '../api/client'
 import { socketClient } from '../api/socket'
 import type { AuthUser, QuestionItem, StudentSession, SubmissionResult } from '../api/types'
-import { formatCountdown, formatScore, statusLabels } from '../lib/format'
+import { formatCountdown, formatPoints, formatScore, statusLabels } from '../lib/format'
 
 type StudentPage = 'loading' | 'join' | 'waiting' | 'exam' | 'result'
 
@@ -46,6 +46,7 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
   const [opening, setOpening] = useState(false)
   const [questions, setQuestions] = useState<QuestionItem[]>([])
   const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [texts, setTexts] = useState<Record<string, string>>({})
   const [questionIndex, setQuestionIndex] = useState(0)
   const [deadline, setDeadline] = useState(0)
   const [secondsLeft, setSecondsLeft] = useState(0)
@@ -55,8 +56,14 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
   const [tabWarning, setTabWarning] = useState(false)
   const [result, setResult] = useState<SubmissionResult | null>(null)
   const submittingRef = useRef(false)
+  const textsRef = useRef(texts)
+  textsRef.current = texts
+  // Câu tự luận được lưu khi học sinh ngừng gõ một lúc thay vì sau mỗi phím
+  const textTimers = useRef(new Map<string, number>())
 
-  const answeredCount = questions.filter((q) => answers[q.id]).length
+  const isAnswered = (q: QuestionItem) => (q.type === 'ESSAY' ? Boolean(texts[q.id]?.trim()) : Boolean(answers[q.id]))
+  const answeredCount = questions.filter(isAnswered).length
+  const hasEssay = questions.some((q) => q.type === 'ESSAY')
   const currentQuestion = questions[questionIndex]
 
   useEffect(() => {
@@ -67,8 +74,11 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
     api.setParticipantToken(null)
     socketClient.disconnect()
     setSession(null)
+    textTimers.current.forEach((timer) => window.clearTimeout(timer))
+    textTimers.current.clear()
     setQuestions([])
     setAnswers({})
+    setTexts({})
     setResult(null)
     setTabWarning(false)
     setShowSubmit(false)
@@ -98,6 +108,7 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
       }
       setQuestions(examQuestions)
       setAnswers(saved)
+      setTexts(current.textAnswers ?? {})
       setQuestionIndex(0)
       setDeadline(Date.now() + current.secondsRemaining * 1000)
       setSecondsLeft(current.secondsRemaining)
@@ -140,12 +151,19 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
     submittingRef.current = true
     setSubmitting(true)
     try {
+      await flushTextSaves()
       const submission = await api.submitExam(reason)
       setResult(submission)
       setSession((prev) => prev && { ...prev, status: 'submitted', score: submission.score ?? undefined })
       setShowSubmit(false)
       setPage('result')
-      notify(reason === 'TIMEOUT' ? 'Hết giờ — bài làm đã được tự động nộp.' : 'Đã nộp bài. Máy chủ đã chấm điểm.')
+      notify(
+        reason === 'TIMEOUT'
+          ? 'Hết giờ — bài làm đã được tự động nộp.'
+          : submission.pendingEssays
+            ? 'Đã nộp bài. Phần tự luận đang chờ giáo viên chấm.'
+            : 'Đã nộp bài. Máy chủ đã chấm điểm.'
+      )
     } catch (err: any) {
       notify(err.message)
     } finally {
@@ -184,18 +202,27 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
       notify('Kỳ thi đã kết thúc.')
       void syncRef.current()
     }
+    const onGraded = (p: { pendingEssays: number }) => {
+      api
+        .getCurrentSubmission()
+        .then((current) => setResult(current.submission))
+        .catch(() => undefined)
+      if (!p.pendingEssays) notify('Giáo viên đã chấm xong bài tự luận của bạn.')
+    }
 
     socketClient.on('participant:approved', onApproved)
     socketClient.on('participant:rejected', onRejected)
     socketClient.on('participant:status-changed', onStatusChanged)
     socketClient.on('exam:started', onStarted)
     socketClient.on('exam:ended', onEnded)
+    socketClient.on('submission:graded', onGraded)
     return () => {
       socketClient.off('participant:approved', onApproved)
       socketClient.off('participant:rejected', onRejected)
       socketClient.off('participant:status-changed', onStatusChanged)
       socketClient.off('exam:started', onStarted)
       socketClient.off('exam:ended', onEnded)
+      socketClient.off('submission:graded', onGraded)
     }
   }, [])
 
@@ -262,6 +289,30 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
       if (err.code === 'EXAM_NOT_ACTIVE' || err.code === 'EXAM_TIMEOUT' || err.code === 'ALREADY_SUBMITTED') void syncRef.current()
     }
   }
+
+  const persistText = async (questionId: string) => {
+    window.clearTimeout(textTimers.current.get(questionId))
+    textTimers.current.delete(questionId)
+    try {
+      await api.saveTextAnswer(questionId, textsRef.current[questionId] ?? '')
+      setSaveState('saved')
+    } catch (err: any) {
+      setSaveState('error')
+      notify(`Chưa lưu được bài làm: ${err.message}`)
+      if (err.code === 'EXAM_NOT_ACTIVE' || err.code === 'EXAM_TIMEOUT' || err.code === 'ALREADY_SUBMITTED') void syncRef.current()
+    }
+  }
+
+  const editText = (questionId: string, value: string) => {
+    setTexts((prev) => ({ ...prev, [questionId]: value }))
+    textsRef.current = { ...textsRef.current, [questionId]: value }
+    setSaveState('saving')
+    window.clearTimeout(textTimers.current.get(questionId))
+    textTimers.current.set(questionId, window.setTimeout(() => void persistText(questionId), 800))
+  }
+
+  // Lưu ngay các câu tự luận đang chờ (trước khi nộp bài)
+  const flushTextSaves = () => Promise.all(Array.from(textTimers.current.keys()).map(persistText))
 
   if (page === 'loading') {
     return (
@@ -431,7 +482,15 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
         <div className="result-card">
           <div className={`result-icon ${submitted ? '' : 'neutral'}`}>{submitted ? <CheckCircle2 size={34} /> : <Flag size={34} />}</div>
           <div className="section-kicker">{submitted ? 'HOÀN THÀNH BÀI THI' : 'KỲ THI ĐÃ KẾT THÚC'}</div>
-          <h1>{submitted ? 'Bài làm đã được chấm điểm!' : session.status === 'absent' ? 'Bạn chưa làm bài thi này' : 'Kỳ thi đã kết thúc'}</h1>
+          <h1>
+            {submitted
+              ? result?.pendingEssays
+                ? 'Bài làm đã được nộp!'
+                : 'Bài làm đã được chấm điểm!'
+              : session.status === 'absent'
+                ? 'Bạn chưa làm bài thi này'
+                : 'Kỳ thi đã kết thúc'}
+          </h1>
           <p>
             {submitted
               ? `${session.displayName} • ${session.examTitle}`
@@ -439,29 +498,39 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
           </p>
           {result && (
             <>
-              <div className="score-circle">
+              <div className={`score-circle ${result.pendingEssays ? 'pending' : ''}`}>
                 <strong>
-                  {formatScore(result.score)}
-                  <small>/{result.maxScore}</small>
+                  {result.pendingEssays ? (
+                    'Chờ chấm'
+                  ) : (
+                    <>
+                      {formatScore(result.score)}
+                      <small>/{result.maxScore}</small>
+                    </>
+                  )}
                 </strong>
-                <span>ĐIỂM SỐ CHÍNH THỨC</span>
+                <span>{result.pendingEssays ? `${result.pendingEssays} CÂU TỰ LUẬN` : 'ĐIỂM SỐ CHÍNH THỨC'}</span>
               </div>
               <div className="result-stats">
-                <div>
-                  <strong>
-                    {result.correctCount}/{result.totalQuestions}
-                  </strong>
-                  <span>Câu đúng</span>
-                </div>
+                {result.totalQuestions > 0 && (
+                  <div>
+                    <strong>
+                      {result.correctCount}/{result.totalQuestions}
+                    </strong>
+                    <span>Trắc nghiệm đúng</span>
+                  </div>
+                )}
                 <div>
                   <strong>{session.tabWarnings}</strong>
                   <span>Lượt rời trang</span>
                 </div>
               </div>
               <p className="muted small-text">
-                {result.reason === 'TIMEOUT'
-                  ? 'Bài làm được hệ thống tự động nộp khi hết giờ. Kết quả đã được lưu trên máy chủ.'
-                  : 'Kết quả đã được chấm và lưu trữ chính thức trên máy chủ.'}
+                {result.pendingEssays
+                  ? 'Phần trắc nghiệm đã được chấm tự động. Điểm chính thức sẽ hiện ở đây ngay khi giáo viên chấm xong phần tự luận.'
+                  : result.reason === 'TIMEOUT'
+                    ? 'Bài làm được hệ thống tự động nộp khi hết giờ. Kết quả đã được lưu trên máy chủ.'
+                    : 'Kết quả đã được chấm và lưu trữ chính thức trên máy chủ.'}
               </p>
             </>
           )}
@@ -532,7 +601,7 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
             <div className="section-kicker">DANH SÁCH CÂU HỎI</div>
             <div className="question-grid">
               {questions.map((q, i) => (
-                <button key={q.id} className={`${i === questionIndex ? 'selected' : ''} ${answers[q.id] ? 'answered' : ''}`} onClick={() => setQuestionIndex(i)}>
+                <button key={q.id} className={`${i === questionIndex ? 'selected' : ''} ${isAnswered(q) ? 'answered' : ''}`} onClick={() => setQuestionIndex(i)}>
                   {i + 1}
                 </button>
               ))}
@@ -562,19 +631,38 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
               <span className="topic-chip">{currentQuestion.topic}</span>
             </div>
             <h2>{currentQuestion.text}</h2>
-            <p className="select-hint">Chọn một đáp án đúng nhất.</p>
-            <div className="options-list">
-              {currentQuestion.options.map((option, i) => {
-                const isChosen = answers[currentQuestion.id] === option.id
-                return (
-                  <button key={option.id} className={`answer-option ${isChosen ? 'chosen' : ''}`} onClick={() => selectAnswer(currentQuestion.id, option.id)}>
-                    <span className="option-letter">{String.fromCharCode(65 + i)}</span>
-                    <span>{option.text}</span>
-                    {isChosen && <CheckCircle2 size={19} className="option-check" />}
-                  </button>
-                )
-              })}
-            </div>
+            {currentQuestion.type === 'ESSAY' ? (
+              <>
+                <p className="select-hint">
+                  Câu tự luận • {formatPoints(currentQuestion.points)} điểm. Nhập câu trả lời của bạn, bài làm được tự động lưu khi bạn ngừng gõ.
+                </p>
+                <textarea
+                  className="essay-input"
+                  value={texts[currentQuestion.id] ?? ''}
+                  onChange={(e) => editText(currentQuestion.id, e.target.value)}
+                  placeholder="Nhập câu trả lời..."
+                  maxLength={10000}
+                  aria-label={`Câu trả lời câu ${questionIndex + 1}`}
+                />
+                <div className="essay-count">{(texts[currentQuestion.id] ?? '').length}/10000 ký tự</div>
+              </>
+            ) : (
+              <>
+                <p className="select-hint">Chọn một đáp án đúng nhất.</p>
+                <div className="options-list">
+                  {currentQuestion.options.map((option, i) => {
+                    const isChosen = answers[currentQuestion.id] === option.id
+                    return (
+                      <button key={option.id} className={`answer-option ${isChosen ? 'chosen' : ''}`} onClick={() => selectAnswer(currentQuestion.id, option.id)}>
+                        <span className="option-letter">{String.fromCharCode(65 + i)}</span>
+                        <span>{option.text}</span>
+                        {isChosen && <CheckCircle2 size={19} className="option-check" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
             <div className="question-footer">
               <button className="button secondary" disabled={questionIndex === 0} onClick={() => setQuestionIndex((i) => i - 1)}>
                 <ArrowLeft size={16} /> Câu trước
@@ -595,7 +683,7 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
       )}
 
       <div className="exam-footnote">
-        <ShieldCheck size={15} /> CBRN-e Online Exam <span>•</span> Đáp án được lưu tự động sau mỗi lần chọn.
+        <ShieldCheck size={15} /> CBRN-e Online Exam <span>•</span> Bài làm được lưu tự động lên máy chủ.
       </div>
 
       {showSubmit && (
@@ -606,7 +694,10 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
             </div>
             <h2>Bạn chắc chắn muốn nộp bài?</h2>
             <p>
-              Bạn đã trả lời <strong>{answeredCount}/{questions.length}</strong> câu hỏi. Sau khi nộp, bài thi sẽ được máy chủ chấm điểm ngay và không thể sửa.
+              Bạn đã trả lời <strong>{answeredCount}/{questions.length}</strong> câu hỏi.{' '}
+              {hasEssay
+                ? 'Sau khi nộp, phần trắc nghiệm được chấm ngay, phần tự luận chờ giáo viên chấm. Bài làm không thể sửa.'
+                : 'Sau khi nộp, bài thi sẽ được máy chủ chấm điểm ngay và không thể sửa.'}
             </p>
             <div className="modal-actions">
               <button className="button secondary" onClick={() => setShowSubmit(false)}>

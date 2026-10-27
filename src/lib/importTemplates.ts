@@ -4,14 +4,16 @@ const headerStyle = { fontWeight: 'bold', backgroundColor: '#EDF1FF' } as const
 
 export async function downloadExcelTemplate() {
   const { default: writeExcelFile } = await import('write-excel-file/browser')
-  const header = ['Chủ đề', 'Câu hỏi', 'A', 'B', 'C', 'D', 'E', 'F', 'Đáp án đúng'].map((value) => ({ value, ...headerStyle }))
+  const header = ['Chủ đề', 'Câu hỏi', 'A', 'B', 'C', 'D', 'E', 'F', 'Đáp án đúng', 'Điểm'].map((value) => ({ value, ...headerStyle }))
   const rows = [
-    ['Địa lý', 'Thủ đô của Việt Nam là gì?', 'Hà Nội', 'Huế', 'Đà Nẵng', 'TP. Hồ Chí Minh', '', '', 'A'],
-    ['Toán', '2 + 3 bằng bao nhiêu?', '4', '5', '6', '', '', '', 'B'],
-    ['Toán', 'Số nào là số nguyên tố?', '4', '6', '7', '9', '', '', 'C'],
+    ['Địa lý', 'Thủ đô của Việt Nam là gì?', 'Hà Nội', 'Huế', 'Đà Nẵng', 'TP. Hồ Chí Minh', '', '', 'A', 1],
+    ['Toán', '2 + 3 bằng bao nhiêu?', '4', '5', '6', '', '', '', 'B', 1],
+    ['Toán', 'Số nào là số nguyên tố?', '4', '6', '7', '9', '', '', 'C', 1],
+    // Để trống phương án và đáp án: câu tự luận
+    ['Toán', 'Giải thích vì sao 7 là số nguyên tố.', '', '', '', '', '', '', '', 2],
   ]
   await writeExcelFile([header, ...rows], {
-    columns: [{ width: 14 }, { width: 48 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 13 }],
+    columns: [{ width: 14 }, { width: 48 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 13 }, { width: 8 }],
   }).toFile('mau-nhap-de-thi.xlsx')
 }
 
@@ -32,6 +34,8 @@ C. 6
 Câu 3: 3 × 3 bằng bao nhiêu?
 A. 6     B. 8     C. 9     D. 12
 Đáp án: C
+
+Câu 4 (2 điểm): Giải thích vì sao 7 là số nguyên tố.
 `
 
 export function downloadTextTemplate() {

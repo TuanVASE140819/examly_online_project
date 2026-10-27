@@ -61,6 +61,7 @@ export class QuestionsService {
       orderBy: { position: 'asc' },
       select: {
         id: true,
+        type: true,
         topic: true,
         prompt: true,
         position: true,
@@ -80,6 +81,7 @@ export class QuestionsService {
     return {
       questions: questions.map((q) => ({
         id: q.id,
+        type: q.type,
         topic: q.topic,
         text: q.prompt,
         points: q.points,
@@ -127,17 +129,21 @@ export class QuestionsService {
     const question = await prisma.question.create({
       data: {
         examId,
+        type: data.type,
         topic: data.topic,
         prompt: data.prompt,
         points: data.points,
         position,
-        options: {
-          create: data.options.map((opt, idx) => ({
-            text: opt.text,
-            isCorrect: opt.isCorrect,
-            position: opt.position ?? idx,
-          })),
-        },
+        options:
+          data.type === 'MULTIPLE_CHOICE'
+            ? {
+                create: data.options.map((opt, idx) => ({
+                  text: opt.text,
+                  isCorrect: opt.isCorrect,
+                  position: opt.position ?? idx,
+                })),
+              }
+            : undefined,
       },
       include: {
         options: { orderBy: { position: 'asc' } },
@@ -179,6 +185,7 @@ export class QuestionsService {
       const rows = data.questions.map((q, idx) => ({
         id: randomUUID(),
         examId,
+        type: q.type,
         topic: q.topic,
         prompt: q.prompt,
         points: q.points,
@@ -188,7 +195,7 @@ export class QuestionsService {
       await tx.question.createMany({ data: rows })
       await tx.option.createMany({
         data: data.questions.flatMap((q, idx) =>
-          q.options.map((opt, optIdx) => ({
+          (q.type === 'MULTIPLE_CHOICE' ? q.options : []).map((opt, optIdx) => ({
             questionId: rows[idx]!.id,
             text: opt.text,
             isCorrect: opt.isCorrect,

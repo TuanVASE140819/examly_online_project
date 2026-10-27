@@ -45,5 +45,8 @@ export const formatCountdown = (totalSeconds: number) => {
 export const formatTime = (value: string | number | Date) =>
   new Date(value).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
 
+// Số điểm của một câu (có thể lẻ 0.25, 0.5...)
+export const formatPoints = (points: number) => String(Math.round(points * 100) / 100)
+
 export const formatScore = (score: number | null | undefined) =>
   score === null || score === undefined ? '—' : Number.isInteger(score) ? String(score) : score.toFixed(1)

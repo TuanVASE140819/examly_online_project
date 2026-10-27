@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
-import type { AnyZodObject } from 'zod'
+import type { AnyZodObject, ZodTypeAny } from 'zod'
 
-export function validateBody(schema: AnyZodObject) {
+export function validateBody(schema: ZodTypeAny) {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       req.body = await schema.parseAsync(req.body)
