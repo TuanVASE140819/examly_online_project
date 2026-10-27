@@ -1,0 +1,8 @@
+# Vercel chỉ build frontend; backend (server/) chạy trên Render
+server
+node_modules
+dist
+.env
+*.log
+.env.*
+.vercel
