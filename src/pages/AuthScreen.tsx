@@ -136,7 +136,7 @@ export function AuthScreen({ isLiveConnected, onAuthenticated }: { isLiveConnect
           </button>
         </form>
         <div className="privacy-note">
-          <ShieldCheck size={15} /> {isLiveConnected ? 'Đã kết nối máy chủ — phiên đăng nhập được bảo vệ bằng JWT.' : 'Đang chờ kết nối tới máy chủ...'}
+          <ShieldCheck size={15} /> {isLiveConnected ? 'Đã kết nối máy chủ — phiên đăng nhập được bảo vệ bằng JWT.' : 'Đang chờ máy chủ khởi động (có thể mất khoảng 1 phút)...'}
         </div>
         <div className="credit">Credit: VuBinDev</div>
       </div>

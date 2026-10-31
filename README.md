@@ -167,14 +167,14 @@ npm test
 
 ## 6. Triển khai lên Render (học sinh vào từ bất kỳ đâu)
 
-File `render.yaml` tạo **một Web Service** phục vụ cả giao diện lẫn API + Socket.IO tại cùng một địa chỉ (ví dụ `https://cbrn-e.onrender.com`). Database dùng **Neon** (Postgres miễn phí, không hết hạn).
+File `render.yaml` tạo **một Web Service** chạy API + Socket.IO (ví dụ `https://cbrn-e.onrender.com`). Giao diện triển khai riêng trên Vercel với `VITE_API_BASE_URL=https://cbrn-e.onrender.com/api/v1` và `VITE_SOCKET_URL=https://cbrn-e.onrender.com`; biến `FRONTEND_ORIGIN` trên Render phải là địa chỉ Vercel. Database dùng **Neon** (Postgres miễn phí, không hết hạn).
 
 1. **Tạo database trên Neon:** đăng ký tại [neon.tech](https://neon.tech), tạo project (chọn region *AWS Asia Pacific (Singapore)*), vào **Connect**, tắt **Connection pooling** rồi sao chép chuỗi kết nối dạng `postgresql://...neon.tech/neondb?sslmode=require`.
 2. **Đẩy code lên GitHub** (repo đã có `render.yaml` ở thư mục gốc).
 3. **Tạo dịch vụ trên Render:** đăng nhập [render.com](https://render.com) bằng GitHub → **New → Blueprint** → chọn repo này. Khi được hỏi `DATABASE_URL`, dán chuỗi kết nối Neon ở bước 1. `JWT_SECRET` được Render tự sinh.
-4. Đợi build xong (vài phút), mở địa chỉ `https://<tên-dịch-vụ>.onrender.com`. Bảng dữ liệu được tạo tự động lúc khởi động; đăng ký tài khoản giáo viên đầu tiên ở tab **Đăng ký**.
+4. Đợi build xong (vài phút), kiểm tra `https://<tên-dịch-vụ>.onrender.com/api/v1/health` trả về `ok: true`. Bảng dữ liệu được tạo tự động lúc build; mở trang Vercel và đăng ký tài khoản giáo viên đầu tiên ở tab **Đăng ký**.
 5. **Kiểm tra IP:** tạo phòng thi, tắt công tắc **Cho phép học sinh khác mạng**. Dòng chú thích phải hiện IP công khai của mạng bạn (giống IP trên trang như whatismyip.com). Nếu hiện IP dạng `10.x.x.x`, đổi biến `TRUST_PROXY` trên Render (thử `2`) rồi deploy lại.
 
 Lưu ý gói miễn phí của Render:
-- Dịch vụ "ngủ" sau 15 phút không có truy cập; lần mở đầu tiên sau đó mất khoảng 1 phút. Hãy mở trang trước giờ thi vài phút, hoặc nâng lên gói trả phí (từ 7 USD/tháng) để luôn chạy.
+- Dịch vụ "ngủ" sau 15 phút không có truy cập; lần mở đầu tiên sau đó mất khoảng 1 phút. Để giữ dịch vụ luôn thức, tạo lịch gọi `https://<tên-dịch-vụ>.onrender.com/api/v1/health` mỗi 10 phút bằng [cron-job.org](https://cron-job.org) hoặc UptimeRobot (một dịch vụ chạy 24/7 dùng khoảng 744 trong 750 giờ miễn phí mỗi tháng). Hoặc nâng lên gói trả phí (từ 7 USD/tháng) để luôn chạy.
 - Mỗi lần push lên nhánh chính, Render tự build và deploy lại.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, Bell, BookOpenCheck, CheckCircle2, CircleHelp, GraduationCap, LayoutDashboard, LogOut, X } from 'lucide-react'
+import { ArrowRight, Bell, BookOpenCheck, CheckCircle2, CircleHelp, GraduationCap, LayoutDashboard, LoaderCircle, LogOut, X } from 'lucide-react'
 import { api } from './api/client'
 import { socketClient } from './api/socket'
 import type { AuthUser } from './api/types'
@@ -17,6 +17,7 @@ function App() {
   // Vai trò được xác định từ tài khoản đăng nhập, không cho phép tự chuyển
   const [user, setUser] = useState<AuthUser | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
+  const [slowStart, setSlowStart] = useState(false)
   const [isLiveConnected, setIsLiveConnected] = useState(false)
   const [toast, setToast] = useState('')
   const [pendingCount, setPendingCount] = useState(0)
@@ -75,7 +76,28 @@ function App() {
     setToast(`Xin chào ${me.displayName}!`)
   }
 
-  if (!authChecked) return null
+  // Máy chủ gói miễn phí ngủ khi không có truy cập, lần gọi đầu mất khoảng 1 phút.
+  // Chỉ hiện thông báo khi chờ lâu để không nháy màn hình lúc máy chủ đang chạy.
+  useEffect(() => {
+    if (authChecked) return
+    const timer = window.setTimeout(() => setSlowStart(true), 1500)
+    return () => window.clearTimeout(timer)
+  }, [authChecked])
+
+  if (!authChecked) {
+    if (!slowStart) return null
+    return (
+      <div className="center-wrap boot-wrap">
+        <div className="center-card">
+          <div className="center-icon">
+            <LoaderCircle size={26} className="spin" />
+          </div>
+          <h2>Đang kết nối máy chủ...</h2>
+          <p>Máy chủ đang khởi động lại sau thời gian không hoạt động, việc này mất khoảng 1 phút. Vui lòng không tải lại trang.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>

@@ -1,4 +1,4 @@
-# Render Blueprint: một Web Service phục vụ cả giao diện (React đã build) lẫn API + Socket.IO.
+# Render Blueprint: Web Service chỉ chạy API + Socket.IO. Giao diện chạy riêng trên Vercel.
 # Database dùng Postgres bên ngoài (Neon): dán chuỗi kết nối vào DATABASE_URL khi tạo Blueprint.
 services:
   - type: web
@@ -6,12 +6,13 @@ services:
     runtime: node
     plan: free
     region: singapore
-    # NODE_ENV=production làm npm ci bỏ devDependencies, nên phải --include=dev để có vite, tsc, prisma
+    # NODE_ENV=production làm npm ci bỏ devDependencies, nên phải --include=dev để có tsc, prisma.
+    # Đồng bộ bảng ngay lúc build (gói free không có pre-deploy command) để lần khởi động sau
+    # khi máy chủ ngủ dậy không phải chờ prisma; lỗi schema sẽ làm hỏng build thay vì làm sập dịch vụ.
     buildCommand: >-
-      npm ci --include=dev && npm run build &&
-      cd server && npm ci --include=dev && npx prisma generate && npm run build
-    # Đồng bộ bảng trước khi chạy (gói free không có pre-deploy command)
-    startCommand: cd server && npx prisma db push --skip-generate && npm start
+      cd server && npm ci --include=dev && npx prisma generate && npm run build &&
+      npx prisma db push --skip-generate
+    startCommand: cd server && node dist/index.js
     healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_VERSION
@@ -25,8 +26,6 @@ services:
       # Render đứng trước ứng dụng đúng 1 lớp proxy
       - key: TRUST_PROXY
         value: "1"
-      - key: FRONTEND_DIST
-        value: ../dist
       # Giao diện chạy riêng trên Vercel gọi API và Socket.IO sang đây nên phải được CORS cho phép
       - key: FRONTEND_ORIGIN
         value: https://examly-online-project.vercel.app
