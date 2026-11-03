@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { BookOpenCheck, GraduationCap, LayoutDashboard, Lock, LogIn, Mail, ShieldAlert, ShieldCheck, UserPlus, UserRound } from 'lucide-react'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import type { AuthUser } from '../api/types'
+import { getGoogleIdToken, isGoogleSignInEnabled } from '../lib/firebase'
 
 type Mode = 'login' | 'register'
 
@@ -37,6 +38,25 @@ export function AuthScreen({ isLiveConnected, onAuthenticated }: { isLiveConnect
           : await api.register({ email: email.trim(), password, displayName: displayName.trim(), role })
       onAuthenticated(user)
     } catch (err: any) {
+      setError(err.message)
+      setLoading(false)
+    }
+  }
+
+  const signInWithGoogle = async () => {
+    setError('')
+    setLoading(true)
+    try {
+      const idToken = await getGoogleIdToken()
+      if (!idToken) {
+        setLoading(false)
+        return
+      }
+      // Chỉ gửi vai trò ở mục Đăng ký; tài khoản đã có thì giữ nguyên vai trò cũ
+      onAuthenticated(await api.loginWithGoogle(idToken, mode === 'register' ? role : undefined))
+    } catch (err: any) {
+      // Tài khoản Google mới: chuyển sang Đăng ký để chọn vai trò trước khi tạo tài khoản
+      if (err instanceof ApiError && err.code === 'GOOGLE_ACCOUNT_NOT_REGISTERED') setMode('register')
       setError(err.message)
       setLoading(false)
     }
@@ -135,11 +155,30 @@ export function AuthScreen({ isLiveConnected, onAuthenticated }: { isLiveConnect
             )}
           </button>
         </form>
+        {isGoogleSignInEnabled && (
+          <>
+            <div className="auth-divider">hoặc</div>
+            <button type="button" className="button secondary full-button google-button" disabled={loading} onClick={() => void signInWithGoogle()}>
+              <GoogleLogo /> Tiếp tục với Google
+            </button>
+          </>
+        )}
         <div className="privacy-note">
           <ShieldCheck size={15} /> {isLiveConnected ? 'Đã kết nối máy chủ — phiên đăng nhập được bảo vệ bằng JWT.' : 'Đang chờ máy chủ khởi động (có thể mất khoảng 1 phút)...'}
         </div>
         <div className="credit">Credit: VuBinDev</div>
       </div>
     </div>
+  )
+}
+
+function GoogleLogo() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </svg>
   )
 }

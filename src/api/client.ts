@@ -177,6 +177,16 @@ class ApiClient {
     return data.user
   }
 
+  // role chỉ dùng khi tài khoản Google chưa có trên hệ thống (tạo mới)
+  async loginWithGoogle(idToken: string, role?: 'TEACHER' | 'STUDENT'): Promise<AuthUser> {
+    const data = await this.request<{ token: string; user: AuthUser }>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ idToken, role }),
+    })
+    this.setAuthToken(data.token)
+    return data.user
+  }
+
   async getMe(): Promise<AuthUser> {
     const res = await this.request<{ user: AuthUser }>('/auth/me', {}, 'user')
     return res.user

@@ -20,6 +20,15 @@ export class AuthController {
     }
   }
 
+  static async loginWithGoogle(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await AuthService.loginWithGoogle(req.body)
+      return res.json(result)
+    } catch (err) {
+      next(err)
+    }
+  }
+
   static async getMe(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await AuthService.getMe(req.user!.sub)

@@ -13,5 +13,12 @@ export const registerSchema = z.object({
   role: z.enum(['TEACHER', 'STUDENT']).default('TEACHER'),
 })
 
+export const googleLoginSchema = z.object({
+  idToken: z.string().min(1, 'Thiếu ID token của Google').max(4096),
+  // Chỉ dùng khi tài khoản Google chưa có trên hệ thống: tạo tài khoản mới với vai trò này
+  role: z.enum(['TEACHER', 'STUDENT']).optional(),
+})
+
 export type LoginInput = z.infer<typeof loginSchema>
 export type RegisterInput = z.infer<typeof registerSchema>
+export type GoogleLoginInput = z.infer<typeof googleLoginSchema>

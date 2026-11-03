@@ -81,6 +81,19 @@ npm run dev
 
 Mọi người dùng phải **đăng nhập** trước; vai trò (Giáo viên / Học sinh) được xác định từ tài khoản. Hệ thống không có sẵn tài khoản hay phòng thi nào — tạo tài khoản ở tab **Đăng ký** trên màn hình đăng nhập (chọn vai trò Giáo viên hoặc Học sinh).
 
+### Đăng nhập bằng Google (Firebase)
+
+Nút **Tiếp tục với Google** chỉ hiện khi đã cấu hình Firebase. Firebase chỉ dùng để xác minh tài khoản Google; backend kiểm tra ID token rồi cấp JWT như đăng nhập thường.
+
+- Email Google trùng tài khoản đã có thì đăng nhập vào tài khoản đó (giữ nguyên vai trò).
+- Email chưa có: ở tab **Đăng ký**, chọn vai trò rồi bấm **Tiếp tục với Google** để tạo tài khoản (họ tên lấy từ Google, không có mật khẩu). Bấm ở tab Đăng nhập thì trang sẽ chuyển sang tab Đăng ký để chọn vai trò.
+
+Cấu hình:
+1. Tạo project tại [console.firebase.google.com](https://console.firebase.google.com) → **Authentication → Sign-in method** → bật **Google**.
+2. **Authentication → Settings → Authorized domains:** thêm tên miền của trang (ví dụ `examly-online-project.vercel.app`; `localhost` có sẵn). Mở trang bằng IP trong mạng LAN thì thêm cả IP đó.
+3. **Project settings → Your apps** → thêm Web app, chép cấu hình vào `.env` ở thư mục gốc (trên Vercel là Environment Variables, rồi build lại): `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`.
+4. Đặt `FIREBASE_PROJECT_ID` (trùng project ID ở trên) trong `server/.env` hoặc trên Render. Không cần service account.
+
 ### Câu hỏi trắc nghiệm và tự luận
 
 Khi **Thêm câu hỏi**, giáo viên chọn loại **Trắc nghiệm** (2–6 phương án, đúng 1 đáp án) hoặc **Tự luận** (học sinh tự viết câu trả lời), và đặt **số điểm** cho từng câu (mặc định 1). Điểm bài thi quy về thang 10 theo tỷ lệ điểm đạt được trên tổng điểm của đề.

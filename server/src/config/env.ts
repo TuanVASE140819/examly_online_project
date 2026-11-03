@@ -14,6 +14,8 @@ const envSchema = z.object({
     .transform((v) => (/^\d+$/.test(v) ? Number(v) : v)),
   // Thư mục frontend đã build; khi đặt, backend phục vụ luôn giao diện web (triển khai một dịch vụ)
   FRONTEND_DIST: z.string().optional(),
+  // Project ID của Firebase để xác minh đăng nhập Google; để trống thì tắt đăng nhập Google
+  FIREBASE_PROJECT_ID: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)

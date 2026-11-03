@@ -18,7 +18,9 @@ export function createApp(): Express {
   // để req.ip là IP thật của học sinh (dùng cho kiểm tra cùng mạng và rate limit)
   app.set('trust proxy', env.TRUST_PROXY)
 
-  app.use(helmet())
+  // same-origin-allow-popups: cửa sổ đăng nhập Google (Firebase) vẫn báo kết quả về được trang
+  // khi backend phục vụ luôn giao diện (FRONTEND_DIST)
+  app.use(helmet({ crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' } }))
   app.use(
     cors({
       origin: env.FRONTEND_ORIGIN,
