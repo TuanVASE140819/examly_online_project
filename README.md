@@ -187,6 +187,10 @@ File `render.yaml` tạo **một Web Service** chạy API + Socket.IO (ví dụ 
 3. **Tạo dịch vụ trên Render:** đăng nhập [render.com](https://render.com) bằng GitHub → **New → Blueprint** → chọn repo này. Khi được hỏi `DATABASE_URL`, dán chuỗi kết nối Neon ở bước 1. `JWT_SECRET` được Render tự sinh.
 4. Đợi build xong (vài phút), kiểm tra `https://<tên-dịch-vụ>.onrender.com/api/v1/health` trả về `ok: true`. Bảng dữ liệu được tạo tự động lúc build; mở trang Vercel và đăng ký tài khoản giáo viên đầu tiên ở tab **Đăng ký**.
 5. **Kiểm tra IP:** tạo phòng thi, tắt công tắc **Cho phép học sinh khác mạng**. Dòng chú thích phải hiện IP công khai của mạng bạn (giống IP trên trang như whatismyip.com). Nếu hiện IP dạng `10.x.x.x`, đổi biến `TRUST_PROXY` trên Render (thử `2`) rồi deploy lại.
+6. **Bật đăng nhập Google (không bắt buộc):** tạo project Firebase theo mục *Đăng nhập bằng Google (Firebase)* ở phần 3, nhớ thêm tên miền Vercel vào **Authorized domains**. Sau đó:
+   - **Vercel** → project → **Settings → Environment Variables**: thêm `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID` (môi trường *Production*) rồi deploy lại (`npx vercel deploy --prod`). Biến `VITE_*` được gắn vào lúc build nên phải deploy lại mới có hiệu lực.
+   - **Render** → dịch vụ → **Environment**: thêm `FIREBASE_PROJECT_ID` (trùng `VITE_FIREBASE_PROJECT_ID`) → **Save Changes**; Render tự khởi động lại dịch vụ.
+   - Kiểm tra: màn hình đăng nhập hiện nút **Tiếp tục với Google**. Nếu backend trả lỗi `GOOGLE_AUTH_DISABLED` thì Render chưa có `FIREBASE_PROJECT_ID`; lỗi `auth/unauthorized-domain` trên trình duyệt thì tên miền chưa có trong Authorized domains.
 
 Lưu ý gói miễn phí của Render:
 - Dịch vụ "ngủ" sau 15 phút không có truy cập; lần mở đầu tiên sau đó mất khoảng 1 phút. Để giữ dịch vụ luôn thức, tạo lịch gọi `https://<tên-dịch-vụ>.onrender.com/api/v1/health` mỗi 10 phút bằng [cron-job.org](https://cron-job.org) hoặc UptimeRobot (một dịch vụ chạy 24/7 dùng khoảng 744 trong 750 giờ miễn phí mỗi tháng). Hoặc nâng lên gói trả phí (từ 7 USD/tháng) để luôn chạy.
