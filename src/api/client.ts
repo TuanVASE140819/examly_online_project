@@ -1,6 +1,18 @@
 import type {
+  AddMembersResult,
+  AdminUser,
+  AdminUserList,
+  AssignmentInput,
+  AssignmentRoster,
   AuthUser,
+  ClassDetail,
+  ClassSummary,
   CurrentSubmissionState,
+  StudentAssignment,
+  StudentGrades,
+  TeacherAssignment,
+  TeacherSubmission,
+  UserRoleName,
   ExamStatus,
   NewQuestionInput,
   ParticipantSubmissionDetail,
@@ -52,6 +64,7 @@ function mapExam(e: any): Room {
     participantCount: e.participantCount ?? 0,
     allowExternalNetwork: e.allowExternalNetwork ?? true,
     teacherNetworkIp: e.teacherNetworkIp ?? null,
+    resultsPublished: e.resultsPublished ?? false,
   }
 }
 
@@ -216,6 +229,15 @@ class ApiClient {
     return mapExam(res.exam)
   }
 
+  // Công bố (true) hoặc ẩn lại (false) điểm bài kiểm tra cho học sinh
+  async publishExamResults(examId: string, published: boolean): Promise<boolean> {
+    const res = await this.request<{ exam: { resultsPublished: boolean } }>(`/exams/${examId}/results`, {
+      method: 'POST',
+      body: JSON.stringify({ published }),
+    }, 'user')
+    return res.exam.resultsPublished
+  }
+
   async setNetworkPolicy(examId: string, allowExternalNetwork: boolean): Promise<Pick<Room, 'allowExternalNetwork' | 'teacherNetworkIp'>> {
     const res = await this.request<{ exam: { allowExternalNetwork: boolean; teacherNetworkIp: string | null } }>(`/exams/${examId}/network`, {
       method: 'PATCH',
@@ -352,6 +374,134 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ eventType, metadata }),
     }, 'participant')
+  }
+
+  // ===== Quản trị viên: người dùng =====
+  async listUsers(filter: { role?: UserRoleName; q?: string } = {}): Promise<AdminUserList> {
+    const params = new URLSearchParams()
+    if (filter.role) params.set('role', filter.role)
+    if (filter.q) params.set('q', filter.q)
+    const qs = params.toString()
+    return this.request<AdminUserList>(`/admin/users${qs ? `?${qs}` : ''}`, {}, 'user')
+  }
+
+  async createUser(input: { email: string; displayName: string; role: UserRoleName; password?: string }): Promise<AdminUser> {
+    const res = await this.request<{ user: AdminUser }>('/admin/users', { method: 'POST', body: JSON.stringify(input) }, 'user')
+    return res.user
+  }
+
+  async updateUser(userId: string, input: { displayName?: string; role?: UserRoleName; password?: string }): Promise<AdminUser> {
+    const res = await this.request<{ user: AdminUser }>(`/admin/users/${userId}`, { method: 'PATCH', body: JSON.stringify(input) }, 'user')
+    return res.user
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    await this.request(`/admin/users/${userId}`, { method: 'DELETE' }, 'user')
+  }
+
+  // ===== Giáo viên: lớp học =====
+  async listClasses(): Promise<ClassSummary[]> {
+    const res = await this.request<{ classes: ClassSummary[] }>('/classes', {}, 'user')
+    return res.classes
+  }
+
+  async createClass(input: { name: string; description?: string }): Promise<ClassSummary> {
+    const res = await this.request<{ class: ClassSummary }>('/classes', { method: 'POST', body: JSON.stringify(input) }, 'user')
+    return res.class
+  }
+
+  async updateClass(classId: string, input: { name: string; description?: string }): Promise<ClassSummary> {
+    const res = await this.request<{ class: ClassSummary }>(`/classes/${classId}`, { method: 'PATCH', body: JSON.stringify(input) }, 'user')
+    return res.class
+  }
+
+  async deleteClass(classId: string): Promise<void> {
+    await this.request(`/classes/${classId}`, { method: 'DELETE' }, 'user')
+  }
+
+  async getClass(classId: string): Promise<ClassDetail> {
+    return this.request<ClassDetail>(`/classes/${classId}`, {}, 'user')
+  }
+
+  async addClassMembers(classId: string, emails: string[]): Promise<AddMembersResult> {
+    return this.request<AddMembersResult>(`/classes/${classId}/members`, { method: 'POST', body: JSON.stringify({ emails }) }, 'user')
+  }
+
+  async removeClassMember(classId: string, studentId: string): Promise<void> {
+    await this.request(`/classes/${classId}/members/${studentId}`, { method: 'DELETE' }, 'user')
+  }
+
+  // ===== Giáo viên: bài tập =====
+  async createAssignment(classId: string, input: AssignmentInput): Promise<TeacherAssignment> {
+    const res = await this.request<{ assignment: TeacherAssignment }>(
+      `/classes/${classId}/assignments`,
+      { method: 'POST', body: JSON.stringify(input) },
+      'user'
+    )
+    return res.assignment
+  }
+
+  async updateAssignment(assignmentId: string, input: Partial<AssignmentInput>): Promise<TeacherAssignment> {
+    const res = await this.request<{ assignment: TeacherAssignment }>(
+      `/assignments/${assignmentId}`,
+      { method: 'PATCH', body: JSON.stringify(input) },
+      'user'
+    )
+    return res.assignment
+  }
+
+  async deleteAssignment(assignmentId: string): Promise<void> {
+    await this.request(`/assignments/${assignmentId}`, { method: 'DELETE' }, 'user')
+  }
+
+  async getAssignmentRoster(assignmentId: string): Promise<AssignmentRoster> {
+    return this.request<AssignmentRoster>(`/assignments/${assignmentId}`, {}, 'user')
+  }
+
+  async gradeAssignment(assignmentId: string, studentId: string, score: number, feedback: string): Promise<TeacherSubmission> {
+    const res = await this.request<{ submission: TeacherSubmission }>(
+      `/assignments/${assignmentId}/submissions/${studentId}/grade`,
+      { method: 'PUT', body: JSON.stringify({ score, feedback }) },
+      'user'
+    )
+    return res.submission
+  }
+
+  async publishAssignmentGrades(assignmentId: string, published: boolean): Promise<TeacherAssignment> {
+    const res = await this.request<{ assignment: TeacherAssignment }>(
+      `/assignments/${assignmentId}/publish`,
+      { method: 'POST', body: JSON.stringify({ published }) },
+      'user'
+    )
+    return res.assignment
+  }
+
+  // ===== Học sinh: lớp học, bài tập, bảng điểm =====
+  async joinClass(joinCode: string): Promise<{ class: ClassSummary; alreadyMember: boolean }> {
+    return this.request('/me/classes/join', { method: 'POST', body: JSON.stringify({ joinCode }) }, 'user')
+  }
+
+  async myClasses(): Promise<ClassSummary[]> {
+    const res = await this.request<{ classes: ClassSummary[] }>('/me/classes', {}, 'user')
+    return res.classes
+  }
+
+  async myAssignments(): Promise<StudentAssignment[]> {
+    const res = await this.request<{ assignments: StudentAssignment[] }>('/me/assignments', {}, 'user')
+    return res.assignments
+  }
+
+  async submitAssignment(assignmentId: string, content: string): Promise<StudentAssignment> {
+    const res = await this.request<{ assignment: StudentAssignment }>(
+      `/me/assignments/${assignmentId}/submission`,
+      { method: 'PUT', body: JSON.stringify({ content }) },
+      'user'
+    )
+    return res.assignment
+  }
+
+  async myGrades(): Promise<StudentGrades> {
+    return this.request<StudentGrades>('/me/grades', {}, 'user')
   }
 }
 

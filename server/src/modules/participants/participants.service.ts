@@ -242,6 +242,7 @@ export class ParticipantsService {
             durationSeconds: true,
             startsAt: true,
             endsAt: true,
+            resultsPublished: true,
           },
         },
         submission: {
@@ -278,7 +279,8 @@ export class ParticipantsService {
         endsAt: participant.exam.endsAt,
         secondsRemaining,
         tabWarnings: participant._count.events,
-        score: participant.submission?.score,
+        // Điểm chỉ gửi cho thí sinh sau khi giáo viên công bố
+        score: participant.exam.resultsPublished ? participant.submission?.score : undefined,
       },
       exam: participant.exam,
     }

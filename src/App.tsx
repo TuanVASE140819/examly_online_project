@@ -1,16 +1,58 @@
-import { useEffect, useState } from 'react'
-import { ArrowRight, Bell, BookOpenCheck, CheckCircle2, CircleHelp, GraduationCap, LayoutDashboard, LoaderCircle, LogOut, X } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import {
+  ArrowRight,
+  Award,
+  Bell,
+  BookOpenCheck,
+  CheckCircle2,
+  CircleHelp,
+  ClipboardList,
+  GraduationCap,
+  LayoutDashboard,
+  LoaderCircle,
+  LogOut,
+  School,
+  UserCog,
+  X,
+} from 'lucide-react'
 import { api } from './api/client'
 import { socketClient } from './api/socket'
 import type { AuthUser } from './api/types'
 import { initials, roleLabels } from './lib/format'
+import { AdminUsers } from './pages/AdminUsers'
 import { AuthScreen } from './pages/AuthScreen'
+import { StudentClasses } from './pages/StudentClasses'
+import { StudentGrades } from './pages/StudentGrades'
 import { StudentPortal } from './pages/StudentPortal'
+import { TeacherClasses } from './pages/TeacherClasses'
 import { TeacherDashboard } from './pages/TeacherDashboard'
 
-const helpText = {
-  teacher: 'Quy trình: Tạo phòng thi → Thêm câu hỏi → Gửi mã phòng cho học sinh → Duyệt thí sinh → Bắt đầu kỳ thi → Theo dõi và xem điểm.',
-  student: 'Quy trình: Nhập lớp và mã phòng do giáo viên cung cấp → Chờ duyệt → Làm bài khi kỳ thi bắt đầu → Nộp bài và xem điểm.',
+type View = 'users' | 'exams' | 'classes' | 'grades'
+
+const navByRole: Record<AuthUser['role'], { view: View; label: string; icon: ReactNode }[]> = {
+  ADMIN: [
+    { view: 'users', label: 'Người dùng', icon: <UserCog size={18} /> },
+    { view: 'exams', label: 'Phòng thi', icon: <LayoutDashboard size={18} /> },
+    { view: 'classes', label: 'Lớp học & bài tập', icon: <School size={18} /> },
+  ],
+  TEACHER: [
+    { view: 'exams', label: 'Phòng thi', icon: <LayoutDashboard size={18} /> },
+    { view: 'classes', label: 'Lớp học & bài tập', icon: <School size={18} /> },
+  ],
+  STUDENT: [
+    { view: 'exams', label: 'Phòng thi', icon: <GraduationCap size={18} /> },
+    { view: 'classes', label: 'Lớp học & bài tập', icon: <ClipboardList size={18} /> },
+    { view: 'grades', label: 'Bảng điểm', icon: <Award size={18} /> },
+  ],
+}
+
+const helpText: Record<AuthUser['role'], string> = {
+  ADMIN:
+    'Quản trị: thêm tài khoản, đổi vai trò, đặt lại mật khẩu ở mục Người dùng. Mục Phòng thi và Lớp học hiển thị dữ liệu của mọi giáo viên.',
+  TEACHER:
+    'Phòng thi: Tạo phòng → Thêm câu hỏi → Duyệt thí sinh → Bắt đầu → Kết thúc → Công bố điểm. Lớp học: Tạo lớp → Gửi mã lớp → Giao bài tập → Chấm → Công bố điểm.',
+  STUDENT:
+    'Phòng thi: nhập mã phòng, chờ duyệt rồi làm bài. Lớp học: nhập mã lớp để nhận bài tập. Điểm thi và bài tập hiện ở Bảng điểm khi giáo viên công bố.',
 }
 
 function App() {
@@ -22,13 +64,25 @@ function App() {
   const [toast, setToast] = useState('')
   const [pendingCount, setPendingCount] = useState(0)
   const [studentCrumb, setStudentCrumb] = useState('Tham gia thi')
+  const [selectedView, setView] = useState<View | null>(null)
+  // Trang phòng thi được giữ nguyên khi chuyển mục để không mất bài đang làm hay theo dõi trực tiếp
+  const [examsMounted, setExamsMounted] = useState(false)
   const isTeacher = user?.role !== 'STUDENT'
+  const nav = user ? navByRole[user.role] : []
+  // Chưa chọn mục nào thì mở mục đầu tiên của vai trò (quản trị viên: Người dùng)
+  const view: View = nav.find((n) => n.view === selectedView)?.view ?? nav[0]?.view ?? 'exams'
+
+  useEffect(() => {
+    if (user && view === 'exams') setExamsMounted(true)
+  }, [user, view])
 
   const logout = () => {
     api.logout()
     socketClient.disconnect()
     setUser(null)
     setPendingCount(0)
+    setView(null)
+    setExamsMounted(false)
   }
 
   // Kiểm tra kết nối Backend API
@@ -72,6 +126,7 @@ function App() {
   const handleAuthenticated = (me: AuthUser) => {
     // Phiên làm bài cũ (nếu còn) không thuộc lần đăng nhập mới
     api.setParticipantToken(null)
+    setView(null)
     setUser(me)
     setToast(`Xin chào ${me.displayName}!`)
   }
@@ -116,11 +171,21 @@ function App() {
               </div>
             </div>
             <div className="workspace-label">KHÔNG GIAN LÀM VIỆC</div>
-            <button className="nav-item active">
-              {isTeacher ? <LayoutDashboard size={18} /> : <GraduationCap size={18} />}
-              <span>{isTeacher ? 'Tổng quan' : 'Phòng thi'}</span>
-              {isTeacher && <span className="nav-dot" />}
-            </button>
+            <nav aria-label="Điều hướng chính">
+              {nav.map((item) => (
+                <button
+                  key={item.view}
+                  className={`nav-item ${view === item.view ? 'active' : ''}`}
+                  aria-current={view === item.view ? 'page' : undefined}
+                  title={item.label}
+                  onClick={() => setView(item.view)}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                  {item.view === 'exams' && isTeacher && pendingCount > 0 && <span className="nav-dot" />}
+                </button>
+              ))}
+            </nav>
             <div className="sidebar-bottom">
               <div className="help-card">
                 <div className="help-icon">
@@ -128,7 +193,7 @@ function App() {
                 </div>
                 <strong>Cần trợ giúp?</strong>
                 <p>Hệ thống thi trắc nghiệm thời gian thực, chấm điểm tự động trên máy chủ.</p>
-                <button onClick={() => setToast(isTeacher ? helpText.teacher : helpText.student)}>
+                <button onClick={() => setToast(helpText[user.role])}>
                   Xem hướng dẫn <ArrowRight size={14} />
                 </button>
               </div>
@@ -151,7 +216,7 @@ function App() {
               <div className="breadcrumb">
                 <span>Không gian làm việc</span>
                 <span className="crumb-slash">/</span>
-                <strong>{isTeacher ? 'Tổng quan' : studentCrumb}</strong>
+                <strong>{view === 'exams' && !isTeacher ? studentCrumb : nav.find((n) => n.view === view)?.label}</strong>
               </div>
               <div className="topbar-actions">
                 <span className={`status-chip ${isLiveConnected ? 'online' : 'offline'}`}>
@@ -174,11 +239,18 @@ function App() {
             </header>
 
             <div className="content">
-              {isTeacher ? (
-                <TeacherDashboard user={user} isLiveConnected={isLiveConnected} notify={setToast} onPendingChange={setPendingCount} />
-              ) : (
-                <StudentPortal user={user} notify={setToast} onPageChange={setStudentCrumb} />
+              {examsMounted && (
+                <div hidden={view !== 'exams'}>
+                  {isTeacher ? (
+                    <TeacherDashboard user={user} isLiveConnected={isLiveConnected} notify={setToast} onPendingChange={setPendingCount} />
+                  ) : (
+                    <StudentPortal user={user} notify={setToast} onPageChange={setStudentCrumb} />
+                  )}
+                </div>
               )}
+              {view === 'users' && user.role === 'ADMIN' && <AdminUsers currentUser={user} notify={setToast} />}
+              {view === 'classes' && (isTeacher ? <TeacherClasses user={user} notify={setToast} /> : <StudentClasses notify={setToast} />)}
+              {view === 'grades' && !isTeacher && <StudentGrades notify={setToast} />}
             </div>
           </main>
         </div>

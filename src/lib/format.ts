@@ -48,5 +48,22 @@ export const formatTime = (value: string | number | Date) =>
 // Số điểm của một câu (có thể lẻ 0.25, 0.5...)
 export const formatPoints = (points: number) => String(Math.round(points * 100) / 100)
 
+// "07/11/2026"
+export const formatDate = (value: string | number | Date) =>
+  new Date(value).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+// "14:30 07/11/2026"
+export const formatDateTime = (value: string | number | Date) => `${formatTime(value)} ${formatDate(value)}`
+
+// Giá trị cho <input type="datetime-local"> theo giờ máy người dùng: "2026-11-07T14:30"
+export const toDateTimeInput = (value: string | null | undefined) => {
+  if (!value) return ''
+  const d = new Date(value)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+export const isOverdue = (dueAt: string | null | undefined) => Boolean(dueAt && Date.parse(dueAt) < Date.now())
+
 export const formatScore = (score: number | null | undefined) =>
   score === null || score === undefined ? '—' : Number.isInteger(score) ? String(score) : score.toFixed(1)

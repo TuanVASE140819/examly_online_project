@@ -87,15 +87,28 @@ export const socketEmitter = {
     ioInstance?.to(socketRooms.teacher(examId)).emit('proctoring:warning', { examId, ...warning })
   },
 
-  // Báo thí sinh đã nộp bài tới giáo viên
+  // Báo thí sinh đã nộp bài tới giáo viên.
+  // Thí sinh không nhận điểm qua socket: điểm chỉ hiện khi giáo viên công bố (thí sinh tải lại qua API).
   participantSubmitted(examId: string, payload: { participantId: string; score: number | null; pendingEssays: number; submittedAt: string }) {
     ioInstance?.to(socketRooms.teacher(examId)).emit('participant:submitted', { examId, ...payload })
-    ioInstance?.to(socketRooms.participant(payload.participantId)).emit('submission:result', payload)
+    ioInstance?.to(socketRooms.participant(payload.participantId)).emit('submission:result', {
+      participantId: payload.participantId,
+      pendingEssays: payload.pendingEssays,
+      submittedAt: payload.submittedAt,
+    })
   },
 
-  // Giáo viên chấm câu tự luận: cập nhật điểm cho giáo viên và thí sinh
+  // Giáo viên chấm câu tự luận: giáo viên nhận điểm mới, thí sinh chỉ nhận tín hiệu để tải lại
   submissionGraded(examId: string, payload: { participantId: string; score: number | null; pendingEssays: number }) {
     ioInstance?.to(socketRooms.teacher(examId)).emit('participant:graded', { examId, ...payload })
-    ioInstance?.to(socketRooms.participant(payload.participantId)).emit('submission:graded', payload)
+    ioInstance?.to(socketRooms.participant(payload.participantId)).emit('submission:graded', {
+      participantId: payload.participantId,
+      pendingEssays: payload.pendingEssays,
+    })
+  },
+
+  // Giáo viên công bố hoặc ẩn điểm: thí sinh trong phòng tải lại kết quả
+  resultsPublished(examId: string, published: boolean) {
+    ioInstance?.to([socketRooms.public(examId), socketRooms.teacher(examId)]).emit('exam:results-published', { examId, published })
   },
 }

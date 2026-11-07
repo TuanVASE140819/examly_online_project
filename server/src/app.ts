@@ -10,6 +10,9 @@ import { questionsRoutes } from './modules/questions/questions.routes.js'
 import { participantsRoutes } from './modules/participants/participants.routes.js'
 import { submissionsRoutes } from './modules/submissions/submissions.routes.js'
 import { proctoringRoutes } from './modules/proctoring/proctoring.routes.js'
+import { adminRoutes } from './modules/admin/admin.routes.js'
+import { classesRoutes } from './modules/classes/classes.routes.js'
+import { studentRoutes } from './modules/student/student.routes.js'
 
 export function createApp(): Express {
   const app = express()
@@ -48,6 +51,9 @@ export function createApp(): Express {
   app.use('/api/v1', submissionsRoutes)
   app.use('/api/v1', proctoringRoutes)
   app.use('/api/v1/exams', examsRoutes)
+  app.use('/api/v1/admin', adminRoutes)
+  app.use('/api/v1', classesRoutes)
+  app.use('/api/v1', studentRoutes)
 
   // Triển khai một dịch vụ (Render): phục vụ frontend đã build, mọi đường dẫn ngoài /api trả về index.html
   if (env.FRONTEND_DIST) {

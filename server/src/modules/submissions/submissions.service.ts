@@ -5,6 +5,14 @@ import { socketEmitter } from '../../sockets/socketEmitter.js'
 import { gradeAnswers } from './grading.js'
 import type { GradeEssayInput, SaveAnswerInput, SubmitExamInput } from './submissions.schemas.js'
 
+// Bài nộp gửi cho thí sinh: điểm và số câu đúng chỉ có sau khi giáo viên công bố
+export function toStudentSubmission<T extends { score: number | null; correctCount: number }>(submission: T | null, published: boolean) {
+  if (!submission) return null
+  return published
+    ? { ...submission, resultsPublished: true }
+    : { ...submission, score: null, correctCount: null, resultsPublished: false }
+}
+
 export class SubmissionsService {
   // Lấy danh sách câu trả lời đã lưu và thông tin thời gian làm bài
   static async getCurrentSubmission(participantId: string) {
@@ -43,7 +51,8 @@ export class SubmissionsService {
 
     return {
       submitted: participant.status === ParticipantStatus.SUBMITTED,
-      submission: participant.submission,
+      submission: toStudentSubmission(participant.submission, Boolean(participant.exam.resultsPublished)),
+      resultsPublished: Boolean(participant.exam.resultsPublished),
       answers: answersMap,
       textAnswers,
       secondsRemaining,
@@ -147,6 +156,7 @@ export class SubmissionsService {
       return {
         submission: participant.submission,
         alreadySubmitted: true,
+        resultsPublished: Boolean(participant.exam.resultsPublished),
       }
     }
 
@@ -226,6 +236,7 @@ export class SubmissionsService {
     return {
       submission: result,
       alreadySubmitted: false,
+      resultsPublished: Boolean(participant.exam.resultsPublished),
     }
   }
 

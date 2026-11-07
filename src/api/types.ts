@@ -30,6 +30,8 @@ export interface Room {
   allowExternalNetwork: boolean
   // IP của giáo viên được ghi nhận lúc khóa mạng
   teacherNetworkIp: string | null
+  // Học sinh chỉ thấy điểm khi giáo viên đã công bố
+  resultsPublished: boolean
 }
 
 export interface OptionItem {
@@ -73,15 +75,18 @@ export interface AuthUser {
 }
 
 export interface SubmissionResult {
+  // null khi còn câu tự luận chờ chấm, hoặc (với học sinh) khi điểm chưa được công bố
   score: number | null
   maxScore: number
-  correctCount: number
+  correctCount: number | null
   // Số câu trắc nghiệm của đề
   totalQuestions: number
   // Số câu tự luận chờ giáo viên chấm; score = null cho tới khi chấm xong
   pendingEssays: number
   reason: 'MANUAL' | 'TIMEOUT'
   submittedAt: string
+  // Chỉ có trong phản hồi gửi học sinh
+  resultsPublished?: boolean
 }
 
 export interface CurrentSubmissionState {
@@ -117,4 +122,147 @@ export interface ParticipantSubmissionDetail {
   participant: { id: string; name: string; className: string; status: StudentStatus }
   submission: SubmissionResult | null
   questions: GradingQuestion[]
+}
+
+// ===== Quản trị người dùng =====
+export type UserRoleName = AuthUser['role']
+
+export interface AdminUser {
+  id: string
+  email: string
+  displayName: string
+  role: UserRoleName
+  loginMethod: 'PASSWORD' | 'GOOGLE'
+  createdAt: string
+  examCount: number
+  // Giáo viên: số lớp đang dạy; học sinh: số lớp đang học
+  classCount: number
+}
+
+export interface AdminUserList {
+  users: AdminUser[]
+  totals: Record<UserRoleName, number>
+}
+
+// ===== Lớp học và bài tập =====
+export interface ClassSummary {
+  id: string
+  name: string
+  description: string | null
+  joinCode: string
+  teacherId: string
+  teacherName: string
+  memberCount: number
+  assignmentCount: number
+  createdAt: string
+}
+
+export interface ClassMemberItem {
+  id: string
+  displayName: string
+  email: string
+  joinedAt: string
+}
+
+export interface TeacherAssignment {
+  id: string
+  classId: string
+  title: string
+  instructions: string
+  dueAt: string | null
+  maxScore: number
+  gradesPublished: boolean
+  publishedAt: string | null
+  createdAt: string
+  submittedCount: number
+  gradedCount: number
+}
+
+export interface ClassDetail {
+  class: ClassSummary
+  members: ClassMemberItem[]
+  assignments: TeacherAssignment[]
+}
+
+export interface AssignmentInput {
+  title: string
+  instructions: string
+  dueAt: string | null
+  maxScore: number
+}
+
+export interface AddMembersResult {
+  added: string[]
+  alreadyMember: string[]
+  notStudent: string[]
+  notFound: string[]
+}
+
+export interface TeacherSubmission {
+  content: string
+  submittedAt: string
+  score: number | null
+  feedback: string | null
+  gradedAt: string | null
+}
+
+export interface RosterEntry {
+  student: { id: string; displayName: string; email: string }
+  submission: TeacherSubmission | null
+}
+
+export interface AssignmentRoster {
+  assignment: TeacherAssignment & { className: string }
+  roster: RosterEntry[]
+}
+
+export interface StudentAssignment {
+  id: string
+  classId: string
+  className: string
+  title: string
+  instructions: string
+  dueAt: string | null
+  maxScore: number
+  gradesPublished: boolean
+  createdAt: string
+  submission: {
+    content: string
+    submittedAt: string
+    late: boolean
+    // Giáo viên đã chấm nên không sửa được nữa
+    locked: boolean
+    score: number | null
+    feedback: string | null
+  } | null
+}
+
+export interface ExamGrade {
+  examId: string
+  title: string
+  teacherName: string
+  className: string
+  date: string | null
+  status: 'ABSENT' | 'UNPUBLISHED' | 'PENDING_GRADING' | 'PUBLISHED'
+  score: number | null
+  maxScore: number
+  correctCount: number | null
+  totalQuestions: number | null
+}
+
+export interface HomeworkGrade {
+  assignmentId: string
+  title: string
+  className: string
+  dueAt: string | null
+  submittedAt: string | null
+  status: 'UNPUBLISHED' | 'NOT_SUBMITTED' | 'UNGRADED' | 'PUBLISHED'
+  score: number | null
+  maxScore: number
+  feedback: string | null
+}
+
+export interface StudentGrades {
+  exams: ExamGrade[]
+  homework: HomeworkGrade[]
 }

@@ -16,6 +16,10 @@ export const networkPolicySchema = z.object({
   allowExternalNetwork: z.boolean(),
 })
 
+export const publishResultsSchema = z.object({
+  published: z.boolean(),
+})
+
 export type CreateExamInput = z.infer<typeof createExamSchema>
 export type UpdateExamInput = z.infer<typeof updateExamSchema>
 export type NetworkPolicyInput = z.infer<typeof networkPolicySchema>

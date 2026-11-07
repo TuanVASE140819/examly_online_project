@@ -257,8 +257,10 @@ describe('Kịch bản 9, 10, 11, 12, 14, 15: Vòng đời Bài thi, Autosave, C
       .send({ reason: 'MANUAL' })
 
     expect(res.status).toBe(200)
-    expect(res.body.submission.score).toBe(8.0)
-    expect(res.body.submission.correctCount).toBe(4)
+    // Điểm được chấm và lưu ngay, nhưng chỉ hiện với học sinh khi giáo viên công bố
+    expect(res.body.submission.score).toBeNull()
+    expect(res.body.submission.correctCount).toBeNull()
+    expect(res.body.submission.resultsPublished).toBe(false)
     expect(res.body.submission.totalQuestions).toBe(5)
     // Điểm do server tự tính, không phải giá trị mock trả về
     expect(createSubmission).toHaveBeenCalledWith({

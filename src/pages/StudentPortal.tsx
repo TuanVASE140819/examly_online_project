@@ -160,9 +160,11 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
       notify(
         reason === 'TIMEOUT'
           ? 'Hết giờ — bài làm đã được tự động nộp.'
-          : submission.pendingEssays
-            ? 'Đã nộp bài. Phần tự luận đang chờ giáo viên chấm.'
-            : 'Đã nộp bài. Máy chủ đã chấm điểm.'
+          : !submission.resultsPublished
+            ? 'Đã nộp bài. Điểm sẽ hiện khi giáo viên công bố.'
+            : submission.pendingEssays
+              ? 'Đã nộp bài. Phần tự luận đang chờ giáo viên chấm.'
+              : 'Đã nộp bài. Máy chủ đã chấm điểm.'
       )
     } catch (err: any) {
       notify(err.message)
@@ -209,6 +211,14 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
         .catch(() => undefined)
       if (!p.pendingEssays) notify('Giáo viên đã chấm xong bài tự luận của bạn.')
     }
+    // Giáo viên công bố (hoặc ẩn) điểm: tải lại kết quả từ máy chủ
+    const onResultsPublished = (p: { published: boolean }) => {
+      api
+        .getCurrentSubmission()
+        .then((current) => setResult(current.submission))
+        .catch(() => undefined)
+      if (p.published) notify('Giáo viên đã công bố điểm bài thi!')
+    }
 
     socketClient.on('participant:approved', onApproved)
     socketClient.on('participant:rejected', onRejected)
@@ -216,6 +226,7 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
     socketClient.on('exam:started', onStarted)
     socketClient.on('exam:ended', onEnded)
     socketClient.on('submission:graded', onGraded)
+    socketClient.on('exam:results-published', onResultsPublished)
     return () => {
       socketClient.off('participant:approved', onApproved)
       socketClient.off('participant:rejected', onRejected)
@@ -223,6 +234,7 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
       socketClient.off('exam:started', onStarted)
       socketClient.off('exam:ended', onEnded)
       socketClient.off('submission:graded', onGraded)
+      socketClient.off('exam:results-published', onResultsPublished)
     }
   }, [])
 
@@ -477,6 +489,9 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
 
   if (page === 'result') {
     const submitted = Boolean(result)
+    const published = Boolean(result?.resultsPublished)
+    // Chưa công bố hoặc còn câu tự luận chờ chấm: chưa có điểm để hiện
+    const waitingScore = !published || Boolean(result?.pendingEssays)
     return (
       <div className="center-wrap">
         <div className="result-card">
@@ -484,7 +499,7 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
           <div className="section-kicker">{submitted ? 'HOÀN THÀNH BÀI THI' : 'KỲ THI ĐÃ KẾT THÚC'}</div>
           <h1>
             {submitted
-              ? result?.pendingEssays
+              ? waitingScore
                 ? 'Bài làm đã được nộp!'
                 : 'Bài làm đã được chấm điểm!'
               : session.status === 'absent'
@@ -498,9 +513,11 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
           </p>
           {result && (
             <>
-              <div className={`score-circle ${result.pendingEssays ? 'pending' : ''}`}>
+              <div className={`score-circle ${waitingScore ? 'pending' : ''}`}>
                 <strong>
-                  {result.pendingEssays ? (
+                  {!published ? (
+                    'Chờ công bố'
+                  ) : result.pendingEssays ? (
                     'Chờ chấm'
                   ) : (
                     <>
@@ -509,10 +526,10 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
                     </>
                   )}
                 </strong>
-                <span>{result.pendingEssays ? `${result.pendingEssays} CÂU TỰ LUẬN` : 'ĐIỂM SỐ CHÍNH THỨC'}</span>
+                <span>{!published ? 'ĐIỂM CHƯA CÔNG BỐ' : result.pendingEssays ? `${result.pendingEssays} CÂU TỰ LUẬN` : 'ĐIỂM SỐ CHÍNH THỨC'}</span>
               </div>
               <div className="result-stats">
-                {result.totalQuestions > 0 && (
+                {published && result.correctCount !== null && result.totalQuestions > 0 && (
                   <div>
                     <strong>
                       {result.correctCount}/{result.totalQuestions}
@@ -526,7 +543,9 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
                 </div>
               </div>
               <p className="muted small-text">
-                {result.pendingEssays
+                {!published
+                  ? 'Bài làm đã được lưu và chấm trên máy chủ. Điểm sẽ hiện ở đây và trong mục Bảng điểm khi giáo viên công bố.'
+                  : result.pendingEssays
                   ? 'Phần trắc nghiệm đã được chấm tự động. Điểm chính thức sẽ hiện ở đây ngay khi giáo viên chấm xong phần tự luận.'
                   : result.reason === 'TIMEOUT'
                     ? 'Bài làm được hệ thống tự động nộp khi hết giờ. Kết quả đã được lưu trên máy chủ.'

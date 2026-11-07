@@ -120,6 +120,30 @@ Trong khung "Phòng thi đang quản lý", công tắc **Cho phép học sinh kh
 
 Học sinh ở mạng khác (ví dụ ở nhà) chỉ vào được khi trang web có địa chỉ công khai: triển khai lên Render (mục 6) hoặc mở đường hầm như `cloudflared tunnel --url http://localhost:5173`.
 
+### Quản trị viên
+
+Quản trị viên không tự đăng ký được. Tạo quản trị viên đầu tiên bằng lệnh (chạy trong `server/`, dùng `DATABASE_URL` của môi trường muốn tạo):
+
+```bash
+npm run admin:create -- phonebinvu@gmail.com "Binvu Phone"            # đăng nhập bằng Google
+npm run admin:create -- admin@truong.vn "Quản trị" "MatKhau-Toi-Thieu-8"  # đăng nhập bằng mật khẩu
+```
+
+Email đã có tài khoản thì được nâng lên quản trị viên. Sau đó quản trị viên vào mục **Người dùng** để thêm/sửa/xóa giáo viên, học sinh và quản trị viên khác, đổi vai trò, đặt lại mật khẩu. Không tự xóa hay tự đổi vai trò của chính mình được; giáo viên còn phòng thi hoặc lớp học thì không xóa được. Quyền quản trị được kiểm tra lại với cơ sở dữ liệu ở mỗi yêu cầu, nên hạ quyền có hiệu lực ngay.
+
+### Lớp học và bài tập về nhà
+
+- **Giáo viên** (mục **Lớp học & bài tập**): tạo lớp (hệ thống cấp mã lớp dạng `LOP-AB12CD`), thêm học sinh bằng email tài khoản hoặc gửi mã lớp để học sinh tự vào. Giao bài tập cho cả lớp (yêu cầu, hạn nộp, thang điểm), chấm từng bài kèm nhận xét, rồi bấm **Công bố điểm**.
+- **Học sinh**: nhập mã lớp để vào lớp, làm và nộp bài tập dạng văn bản (có thể dán đường dẫn tài liệu). Sửa được bài cho tới khi giáo viên chấm; nộp sau hạn vẫn được nhận nhưng ghi là *nộp muộn*.
+
+### Công bố điểm
+
+Học sinh chỉ thấy điểm khi giáo viên công bố:
+- **Bài kiểm tra:** sau khi kỳ thi kết thúc, giáo viên bấm **Công bố điểm** ở khung phòng thi. Trước đó màn hình kết quả của học sinh ghi *Chờ công bố*; khi công bố, điểm hiện ngay không cần tải lại. Giáo viên luôn thấy điểm.
+- **Bài tập:** bấm **Công bố điểm** ở trang chấm bài tập. Có thể **Ẩn điểm** lại bất cứ lúc nào.
+
+Học sinh xem toàn bộ điểm đã công bố ở mục **Bảng điểm**.
+
 ---
 
 ## 4. Kiểm thử Tự động (Automated Test Suite)

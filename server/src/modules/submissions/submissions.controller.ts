@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express'
-import { SubmissionsService } from './submissions.service.js'
+import { SubmissionsService, toStudentSubmission } from './submissions.service.js'
 
 export class SubmissionsController {
   static async getCurrentSubmission(req: Request, res: Response, next: NextFunction) {
@@ -27,7 +27,7 @@ export class SubmissionsController {
   static async submitExam(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await SubmissionsService.submitExam(req.user!.sub, req.body)
-      return res.json(result)
+      return res.json({ ...result, submission: toStudentSubmission(result.submission, result.resultsPublished) })
     } catch (err) {
       next(err)
     }

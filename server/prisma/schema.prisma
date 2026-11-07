@@ -52,6 +52,9 @@ model User {
   updatedAt    DateTime      @updatedAt
   ownedExams   Exam[]        @relation("ExamOwner")
   approved     Participant[] @relation("ApprovedBy")
+  teachingClasses       Classroom[]            @relation("ClassTeacher")
+  classMemberships      ClassMember[]
+  assignmentSubmissions AssignmentSubmission[]
 
   @@map("users")
 }
@@ -71,6 +74,9 @@ model Exam {
   // false: chỉ nhận học sinh cùng mạng với giáo viên (IP giáo viên ghi nhận lúc khóa mạng)
   allowExternalNetwork Boolean      @default(true)
   teacherNetworkIp     String?
+  // Học sinh chỉ xem được điểm bài thi sau khi giáo viên công bố
+  resultsPublished     Boolean      @default(false)
+  resultsPublishedAt   DateTime?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   questions       Question[]
@@ -188,6 +194,73 @@ model ProctoringEvent {
   @@index([examId, occurredAt])
   @@index([participantId])
   @@map("proctoring_events")
+}
+
+// Lớp học do giáo viên quản lý; học sinh vào lớp bằng mã lớp hoặc được giáo viên thêm theo email
+model Classroom {
+  id          String        @id @default(uuid()) @db.Uuid
+  teacherId   String        @db.Uuid
+  teacher     User          @relation("ClassTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  joinCode    String        @unique
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  members     ClassMember[]
+  assignments Assignment[]
+
+  @@index([teacherId])
+  @@map("classrooms")
+}
+
+model ClassMember {
+  id        String    @id @default(uuid()) @db.Uuid
+  classId   String    @db.Uuid
+  classroom Classroom @relation(fields: [classId], references: [id], onDelete: Cascade)
+  studentId String    @db.Uuid
+  student   User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime  @default(now())
+
+  @@unique([classId, studentId])
+  @@index([studentId])
+  @@map("class_members")
+}
+
+// Bài tập về nhà giao cho cả lớp; điểm chỉ hiện với học sinh khi giáo viên công bố
+model Assignment {
+  id              String                 @id @default(uuid()) @db.Uuid
+  classId         String                 @db.Uuid
+  classroom       Classroom              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  title           String
+  instructions    String
+  dueAt           DateTime?
+  maxScore        Float                  @default(10)
+  gradesPublished Boolean                @default(false)
+  publishedAt     DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  submissions     AssignmentSubmission[]
+
+  @@index([classId, createdAt])
+  @@map("assignments")
+}
+
+model AssignmentSubmission {
+  id           String     @id @default(uuid()) @db.Uuid
+  assignmentId String     @db.Uuid
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String     @db.Uuid
+  student      User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  content      String
+  submittedAt  DateTime   @default(now())
+  // null = chưa chấm; sau khi chấm học sinh không sửa bài được nữa
+  score        Float?
+  feedback     String?
+  gradedAt     DateTime?
+
+  @@unique([assignmentId, studentId])
+  @@index([studentId])
+  @@map("assignment_submissions")
 }
 
 model AuditLog {

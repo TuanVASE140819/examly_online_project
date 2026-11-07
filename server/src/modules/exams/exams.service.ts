@@ -76,6 +76,7 @@ export class ExamsService {
         durationMinutes: Math.round(exam.durationSeconds / 60),
         durationSeconds: exam.durationSeconds,
         allowExternalNetwork: exam.allowExternalNetwork,
+        resultsPublished: exam.resultsPublished,
         createdAt: exam.createdAt,
       },
     }
@@ -110,6 +111,7 @@ export class ExamsService {
         questionCount: e._count.questions,
         allowExternalNetwork: e.allowExternalNetwork,
         teacherNetworkIp: e.teacherNetworkIp,
+        resultsPublished: e.resultsPublished,
         createdAt: e.createdAt,
         startsAt: e.startsAt,
         endsAt: e.endsAt,
@@ -151,6 +153,7 @@ export class ExamsService {
         questionCount: exam._count.questions,
         allowExternalNetwork: exam.allowExternalNetwork,
         teacherNetworkIp: exam.teacherNetworkIp,
+        resultsPublished: exam.resultsPublished,
         startsAt: exam.startsAt,
         endsAt: exam.endsAt,
         createdAt: exam.createdAt,
@@ -296,6 +299,37 @@ export class ExamsService {
 
     const updated = await ExamsService.closeExam(examId, userId)
     return { exam: updated ?? exam }
+  }
+
+  // Công bố (hoặc ẩn lại) điểm cho học sinh. Chỉ công bố sau khi kỳ thi kết thúc để
+  // học sinh nộp sớm không biết điểm khi bạn cùng phòng vẫn đang làm bài.
+  static async publishResults(userId: string, role: UserRole, examId: string, published: boolean) {
+    const exam = await prisma.exam.findUnique({ where: { id: examId }, select: { id: true, ownerId: true, status: true } })
+    if (!exam) {
+      throw new AppError(404, 'EXAM_NOT_FOUND', 'Không tìm thấy kỳ thi.')
+    }
+
+    if (role !== UserRole.ADMIN && exam.ownerId !== userId) {
+      throw new AppError(403, 'FORBIDDEN', 'Bạn không có quyền công bố điểm của kỳ thi này.')
+    }
+
+    if (published && exam.status !== ExamStatus.ENDED) {
+      throw new AppError(409, 'EXAM_NOT_ENDED', 'Chỉ công bố điểm được sau khi kỳ thi kết thúc.')
+    }
+
+    const updated = await prisma.exam.update({
+      where: { id: examId },
+      data: { resultsPublished: published, resultsPublishedAt: published ? new Date() : null },
+      select: { id: true, resultsPublished: true, resultsPublishedAt: true },
+    })
+
+    await prisma.auditLog.create({
+      data: { examId, actorId: userId, action: published ? 'RESULTS_PUBLISHED' : 'RESULTS_UNPUBLISHED' },
+    })
+
+    socketEmitter.resultsPublished(examId, published)
+
+    return { exam: updated }
   }
 
   // Đóng kỳ thi (giáo viên bấm kết thúc hoặc hết giờ):

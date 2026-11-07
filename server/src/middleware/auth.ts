@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { UserRole } from '@prisma/client'
 import { env } from '../config/env.js'
+import { prisma } from '../lib/prisma.js'
 import { AppError } from './errorHandler.js'
 
 export type AuthPayload = {
@@ -45,6 +46,32 @@ export function requireRole(...roles: UserRole[]) {
       return next(new AppError(403, 'FORBIDDEN', 'Bạn không có quyền thực hiện hành động này.'))
     }
     next()
+  }
+}
+
+// Token phiên thi (participantToken) cũng mang role STUDENT nhưng sub là participantId.
+// Các route theo tài khoản (lớp học, bài tập, bảng điểm) chỉ nhận token đăng nhập tài khoản.
+export function requireUserAccount(req: Request, _res: Response, next: NextFunction) {
+  if (!req.user || req.user.examId) {
+    return next(new AppError(403, 'ACCOUNT_TOKEN_REQUIRED', 'Vui lòng đăng nhập bằng tài khoản để dùng chức năng này.'))
+  }
+  next()
+}
+
+// Quyền quản trị được đối chiếu với cơ sở dữ liệu ở mỗi yêu cầu, để tài khoản bị hạ quyền
+// hoặc bị xóa mất quyền ngay mà không phải chờ token hết hạn
+export async function requireAdmin(req: Request, _res: Response, next: NextFunction) {
+  try {
+    if (!req.user || req.user.examId || req.user.role !== UserRole.ADMIN) {
+      throw new AppError(403, 'FORBIDDEN', 'Chỉ quản trị viên mới thực hiện được thao tác này.')
+    }
+    const account = await prisma.user.findUnique({ where: { id: req.user.sub }, select: { role: true } })
+    if (account?.role !== UserRole.ADMIN) {
+      throw new AppError(403, 'FORBIDDEN', 'Tài khoản của bạn không còn quyền quản trị. Vui lòng đăng nhập lại.')
+    }
+    next()
+  } catch (err) {
+    next(err)
   }
 }
 

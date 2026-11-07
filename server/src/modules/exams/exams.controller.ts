@@ -56,6 +56,15 @@ export class ExamsController {
     }
   }
 
+  static async publishResults(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await ExamsService.publishResults(req.user!.sub, req.user!.role, req.params['examId']!, req.body.published)
+      return res.json(result)
+    } catch (err) {
+      next(err)
+    }
+  }
+
   static async finishExam(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await ExamsService.finishExam(req.user!.sub, req.user!.role, req.params['examId']!)

@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   Clock3,
   Copy,
+  Eye,
+  EyeOff,
   FileUp,
   Flag,
   Globe,
@@ -232,6 +234,10 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
       api.getParticipants(ex.examId).then(setStudents).catch(() => undefined)
     }
 
+    const onResultsPublished = (p: { examId: string; published: boolean }) => {
+      setExams((prev) => prev.map((e) => (e.id === p.examId ? { ...e, resultsPublished: p.published } : e)))
+    }
+
     socketClient.on('participant:requested', onRequested)
     socketClient.on('participant:status-changed', onStatusChanged)
     socketClient.on('proctoring:warning', onWarning)
@@ -239,6 +245,7 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
     socketClient.on('participant:graded', onGraded)
     socketClient.on('exam:started', onExamStarted)
     socketClient.on('exam:ended', onExamEnded)
+    socketClient.on('exam:results-published', onResultsPublished)
 
     return () => {
       socketClient.off('participant:requested', onRequested)
@@ -248,6 +255,7 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
       socketClient.off('participant:graded', onGraded)
       socketClient.off('exam:started', onExamStarted)
       socketClient.off('exam:ended', onExamEnded)
+      socketClient.off('exam:results-published', onResultsPublished)
     }
   }, [])
 
@@ -282,7 +290,7 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
       updateExam(room.id, { status: updated.status, endsAt: updated.endsAt })
       setStudents(await api.getParticipants(room.id))
       setConfirmFinish(false)
-      notify('Đã kết thúc kỳ thi. Bài làm dang dở đã được tự động nộp và chấm điểm.')
+      notify('Đã kết thúc kỳ thi. Bài làm dang dở đã được tự động nộp và chấm điểm. Bấm "Công bố điểm" khi muốn học sinh xem điểm.')
     } catch (err: any) {
       notify(err.message)
     } finally {
@@ -301,6 +309,27 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
           ? 'Học sinh cùng mạng hoặc khác mạng đều tham gia được phòng thi.'
           : 'Chỉ học sinh dùng chung mạng với bạn mới tham gia được phòng thi.'
       )
+    } catch (err: any) {
+      notify(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const togglePublish = async () => {
+    if (!room) return
+    const publish = !room.resultsPublished
+    if (
+      publish &&
+      counts.awaitingGrading > 0 &&
+      !window.confirm(`Còn ${counts.awaitingGrading} bài chờ chấm tự luận. Những học sinh đó sẽ thấy điểm khi bạn chấm xong. Vẫn công bố?`)
+    )
+      return
+    setBusy(true)
+    try {
+      const resultsPublished = await api.publishExamResults(room.id, publish)
+      updateExam(room.id, { resultsPublished })
+      notify(publish ? 'Đã công bố điểm. Học sinh xem được điểm ở trang kết quả và Bảng điểm.' : 'Đã ẩn điểm với học sinh.')
     } catch (err: any) {
       notify(err.message)
     } finally {
@@ -380,7 +409,7 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
     : room.status === 'active'
     ? `${counts.inProgress} đang làm bài • ${counts.submitted} đã nộp`
     : room.status === 'ended'
-    ? `${counts.submitted} bài đã được chấm điểm`
+    ? `${counts.submitted} bài đã nộp • ${room.resultsPublished ? 'học sinh đã xem được điểm' : 'điểm chưa công bố'}`
     : questions.length === 0
     ? 'Thêm câu hỏi trước khi bắt đầu'
     : `${counts.ready} thí sinh đã sẵn sàng`
@@ -453,7 +482,14 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
               </div>
               <div className="room-banner">
                 <div className="room-banner-top">
-                  <span className={`status-pill ${room.status}`}>● {examStatusLabels[room.status]}</span>
+                  <span className="banner-pills">
+                    <span className={`status-pill ${room.status}`}>● {examStatusLabels[room.status]}</span>
+                    {room.status === 'ended' && (
+                      <span className={`status-pill ${room.resultsPublished ? 'approved' : 'draft'}`}>
+                        {room.resultsPublished ? 'Đã công bố điểm' : 'Chưa công bố điểm'}
+                      </span>
+                    )}
+                  </span>
                   <span className="room-code">
                     MÃ PHÒNG <b>{room.code}</b>
                     <button title="Sao chép mã phòng" onClick={copyCode}>
@@ -530,6 +566,18 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
                     onClick={startRoom}
                   >
                     <Play size={15} /> Bắt đầu kỳ thi
+                  </button>
+                ) : room.status === 'ended' ? (
+                  <button className={`button ${room.resultsPublished ? 'secondary' : 'primary'}`} disabled={busy} onClick={togglePublish}>
+                    {room.resultsPublished ? (
+                      <>
+                        <EyeOff size={14} /> Ẩn điểm
+                      </>
+                    ) : (
+                      <>
+                        <Eye size={14} /> Công bố điểm
+                      </>
+                    )}
                   </button>
                 ) : (
                   <button className="button secondary" disabled>

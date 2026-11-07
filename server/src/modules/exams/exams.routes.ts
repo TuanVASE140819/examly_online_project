@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { UserRole } from '@prisma/client'
 import { ExamsController } from './exams.controller.js'
-import { createExamSchema, networkPolicySchema, updateExamSchema } from './exams.schemas.js'
+import { createExamSchema, networkPolicySchema, publishResultsSchema, updateExamSchema } from './exams.schemas.js'
 import { requireAuth, requireRole } from '../../middleware/auth.js'
 import { validateBody } from '../../middleware/validate.js'
 
@@ -16,3 +16,4 @@ examsRoutes.patch('/:examId', ...teacherAuth, validateBody(updateExamSchema), Ex
 examsRoutes.patch('/:examId/network', ...teacherAuth, validateBody(networkPolicySchema), ExamsController.setNetworkPolicy)
 examsRoutes.post('/:examId/start', ...teacherAuth, ExamsController.startExam)
 examsRoutes.post('/:examId/finish', ...teacherAuth, ExamsController.finishExam)
+examsRoutes.post('/:examId/results', ...teacherAuth, validateBody(publishResultsSchema), ExamsController.publishResults)
