@@ -144,6 +144,18 @@ Học sinh chỉ thấy điểm khi giáo viên công bố:
 
 Học sinh xem toàn bộ điểm đã công bố ở mục **Bảng điểm**.
 
+### Chống sao chép và F12 (tài khoản học sinh)
+
+Khi đăng nhập bằng tài khoản học sinh, trên mọi trang:
+- Không mở được menu chuột phải, kể cả trong ô nhập liệu, vì menu đó có mục *Kiểm tra (Inspect)*.
+- Không bôi đen, sao chép, cắt hay kéo thả nội dung trang (đề thi, bài tập, bảng điểm).
+- Các phím F12, Ctrl+Shift+I/J/C/K, Cmd+Option+I/J/C, Ctrl+U, Ctrl+S, Ctrl+P bị chặn, và trang không in được.
+- Nếu học sinh vẫn mở được công cụ nhà phát triển (DevTools), ví dụ qua menu trình duyệt, trang liên tục dừng lại và bị che bởi thông báo cho tới khi đóng công cụ. Trong giờ thi, mỗi lần mở được tính là **một lượt cảnh báo** và giáo viên nhận được ngay, giống như khi học sinh rời trang.
+
+Học sinh vẫn gõ, bôi đen, sao chép và dán được trong ô trả lời của chính mình. Giáo viên và quản trị viên không bị giới hạn.
+
+Đây là lớp ngăn chặn phía trình duyệt: người rành kỹ thuật vẫn có thể vượt qua. Điều quan trọng hơn là đáp án đúng không bao giờ được gửi xuống máy học sinh, và điểm được chấm trên máy chủ.
+
 ---
 
 ## 4. Kiểm thử Tự động (Automated Test Suite)
@@ -162,7 +174,7 @@ Dự án bao gồm 48 kiểm thử, bao phủ các kịch bản:
 - Chống nộp bài nhiều lần (Idempotency).
 - Từ chối lưu bài khi kỳ thi đã hết giờ (TIMEOUT).
 - Chấm điểm nguyên tử server-side bằng Transaction ($transaction).
-- Giám sát chuyển tab (Proctoring event `TAB_HIDDEN`).
+- Giám sát chuyển tab và mở công cụ nhà phát triển (Proctoring event `TAB_HIDDEN`, `DEVTOOLS_OPEN`).
 - Phải đăng nhập tài khoản học sinh mới tham gia được phòng thi; đăng ký không cho phép tự tạo tài khoản Admin.
 - Thí sinh chưa được duyệt hoặc kỳ thi chưa bắt đầu thì không nộp được bài.
 - Kết thúc kỳ thi (thủ công hoặc tự động khi hết giờ) sẽ tự nộp bài cho thí sinh đang làm và đánh dấu vắng thí sinh chưa vào thi.
@@ -194,7 +206,7 @@ npm test
    - Màn hình Học sinh hiện **Kỳ thi đã bắt đầu!** và nút **Vào làm bài thi**.
 5. **Làm bài & Giám sát:**
    - Mỗi lần chọn đáp án được **Autosave** lên máy chủ; tải lại trang (F5) vẫn quay về đúng bài với đáp án đã chọn.
-   - Chuyển tab hoặc ẩn trình duyệt: số lượt rời trang cập nhật ngay trên màn hình Giáo viên.
+   - Chuyển tab, ẩn trình duyệt hoặc mở công cụ nhà phát triển (F12): số lượt cảnh báo cập nhật ngay trên màn hình Giáo viên.
    - Bấm **Nộp bài**: máy chủ chấm điểm và trả về kết quả chính thức; Giáo viên thấy điểm ngay trong bảng. Đề có câu tự luận thì bài hiện **Chờ chấm** cho tới khi giáo viên bấm **Chấm bài** và chấm xong.
 6. **Kết thúc:**
    - Giáo viên nhấn **Kết thúc kỳ thi**, hoặc máy chủ **tự động kết thúc khi hết giờ** (kể cả sau khi khởi động lại server).

@@ -6,6 +6,7 @@ import { hashJoinCode } from '../../lib/crypto.js'
 import { isSameNetworkAsTeacher, networkNotAllowedError } from '../../lib/network.js'
 import { AppError } from '../../middleware/errorHandler.js'
 import { socketEmitter } from '../../sockets/socketEmitter.js'
+import { WARNING_EVENTS } from '../proctoring/proctoring.schemas.js'
 import type { DecisionInput, JoinRoomInput } from './participants.schemas.js'
 
 export class ParticipantsService {
@@ -133,7 +134,7 @@ export class ParticipantsService {
         _count: {
           select: {
             events: {
-              where: { eventType: 'TAB_HIDDEN' },
+              where: { eventType: { in: [...WARNING_EVENTS] } },
             },
           },
         },
@@ -251,7 +252,7 @@ export class ParticipantsService {
         _count: {
           select: {
             events: {
-              where: { eventType: 'TAB_HIDDEN' },
+              where: { eventType: { in: [...WARNING_EVENTS] } },
             },
           },
         },

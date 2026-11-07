@@ -12,6 +12,7 @@ import {
   LoaderCircle,
   LogOut,
   School,
+  ShieldAlert,
   UserCog,
   X,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ import { api } from './api/client'
 import { socketClient } from './api/socket'
 import type { AuthUser } from './api/types'
 import { initials, roleLabels } from './lib/format'
+import { useStudentLockdown } from './lib/lockdown'
 import { AdminUsers } from './pages/AdminUsers'
 import { AuthScreen } from './pages/AuthScreen'
 import { StudentClasses } from './pages/StudentClasses'
@@ -68,6 +70,8 @@ function App() {
   // Trang phòng thi được giữ nguyên khi chuyển mục để không mất bài đang làm hay theo dõi trực tiếp
   const [examsMounted, setExamsMounted] = useState(false)
   const isTeacher = user?.role !== 'STUDENT'
+  // Học sinh không được chuột phải, sao chép, bôi đen hay mở công cụ nhà phát triển (F12)
+  const devtoolsOpen = useStudentLockdown(user?.role === 'STUDENT')
   const nav = user ? navByRole[user.role] : []
   // Chưa chọn mục nào thì mở mục đầu tiên của vai trò (quản trị viên: Người dùng)
   const view: View = nav.find((n) => n.view === selectedView)?.view ?? nav[0]?.view ?? 'exams'
@@ -244,7 +248,7 @@ function App() {
                   {isTeacher ? (
                     <TeacherDashboard user={user} isLiveConnected={isLiveConnected} notify={setToast} onPendingChange={setPendingCount} />
                   ) : (
-                    <StudentPortal user={user} notify={setToast} onPageChange={setStudentCrumb} />
+                    <StudentPortal user={user} notify={setToast} onPageChange={setStudentCrumb} devtoolsOpen={devtoolsOpen} />
                   )}
                 </div>
               )}
@@ -253,6 +257,18 @@ function App() {
               {view === 'grades' && !isTeacher && <StudentGrades notify={setToast} />}
             </div>
           </main>
+        </div>
+      )}
+
+      {devtoolsOpen && (
+        <div className="devtools-guard" role="alertdialog" aria-modal="true" aria-labelledby="devtools-guard-title">
+          <div className="center-card">
+            <div className="center-icon danger">
+              <ShieldAlert size={26} />
+            </div>
+            <h2 id="devtools-guard-title">Đã phát hiện công cụ nhà phát triển</h2>
+            <p>Học sinh không được mở F12 / DevTools. Hãy đóng công cụ này để tiếp tục. Nếu đang làm bài thi, giáo viên đã nhận được cảnh báo.</p>
+          </div>
         </div>
       )}
 

@@ -2,7 +2,7 @@ import { ParticipantStatus } from '@prisma/client'
 import { prisma } from '../../lib/prisma.js'
 import { AppError } from '../../middleware/errorHandler.js'
 import { socketEmitter } from '../../sockets/socketEmitter.js'
-import type { ProctoringEventInput } from './proctoring.schemas.js'
+import { WARNING_EVENTS, type ProctoringEventInput } from './proctoring.schemas.js'
 
 export class ProctoringService {
   static async recordEvent(participantId: string, data: ProctoringEventInput) {
@@ -29,19 +29,20 @@ export class ProctoringService {
       },
     })
 
-    // Đếm tổng số lần TAB_HIDDEN của thí sinh này
+    // Đếm tổng số lượt cảnh báo (rời trang, mở công cụ nhà phát triển) của thí sinh này
     const totalWarnings = await prisma.proctoringEvent.count({
       where: {
         participantId: participant.id,
-        eventType: 'TAB_HIDDEN',
+        eventType: { in: [...WARNING_EVENTS] },
       },
     })
 
     // Bắn cảnh báo thời gian thực tới giáo viên
-    if (data.eventType === 'TAB_HIDDEN') {
+    if ((WARNING_EVENTS as readonly string[]).includes(data.eventType)) {
       socketEmitter.proctoringWarning(participant.examId, {
         participantId: participant.id,
         displayName: participant.displayName,
+        eventType: data.eventType,
         tabWarnings: totalWarnings,
         occurredAt: event.occurredAt.toISOString(),
       })

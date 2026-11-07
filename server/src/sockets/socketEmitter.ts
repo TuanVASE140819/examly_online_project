@@ -83,7 +83,10 @@ export const socketEmitter = {
   },
 
   // Cảnh báo giám sát (chuyển tab) gửi tới giáo viên
-  proctoringWarning(examId: string, warning: { participantId: string; displayName: string; tabWarnings: number; occurredAt: string }) {
+  proctoringWarning(
+    examId: string,
+    warning: { participantId: string; displayName: string; eventType: string; tabWarnings: number; occurredAt: string },
+  ) {
     ioInstance?.to(socketRooms.teacher(examId)).emit('proctoring:warning', { examId, ...warning })
   },
 

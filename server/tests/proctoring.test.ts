@@ -62,4 +62,41 @@ describe('Giai đoạn 9 — Giám sát & Ghi nhận sự kiện chuyển tab (P
     expect(res.body.ok).toBe(true)
     expect(res.body.tabWarnings).toBe(3)
   })
+
+  it('Mở công cụ nhà phát triển (F12) được tính là một lượt cảnh báo', async () => {
+    vi.mocked(prisma.participant.findUnique).mockResolvedValueOnce({
+      id: participantId,
+      examId,
+      displayName: 'Nguyễn Minh Anh',
+      status: ParticipantStatus.IN_PROGRESS,
+    } as any)
+    vi.mocked(prisma.proctoringEvent.create).mockResolvedValueOnce({
+      id: 'event-2',
+      examId,
+      participantId,
+      eventType: 'DEVTOOLS_OPEN',
+      occurredAt: new Date(),
+    } as any)
+    vi.mocked(prisma.proctoringEvent.count).mockResolvedValueOnce(4)
+
+    const res = await request(app)
+      .post('/api/v1/proctoring/events')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ eventType: 'DEVTOOLS_OPEN' })
+
+    expect(res.status).toBe(200)
+    expect(res.body.tabWarnings).toBe(4)
+    expect(vi.mocked(prisma.proctoringEvent.count).mock.calls[0][0]).toEqual({
+      where: { participantId, eventType: { in: ['TAB_HIDDEN', 'DEVTOOLS_OPEN'] } },
+    })
+  })
+
+  it('Từ chối loại sự kiện không hợp lệ', async () => {
+    const res = await request(app)
+      .post('/api/v1/proctoring/events')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ eventType: 'COPY_EVERYTHING' })
+
+    expect(res.status).toBe(400)
+  })
 })

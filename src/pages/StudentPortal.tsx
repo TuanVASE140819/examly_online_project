@@ -34,9 +34,10 @@ interface Props {
   user: AuthUser
   notify: (message: string) => void
   onPageChange: (label: string) => void
+  devtoolsOpen: boolean
 }
 
-export function StudentPortal({ user, notify, onPageChange }: Props) {
+export function StudentPortal({ user, notify, onPageChange, devtoolsOpen }: Props) {
   const [page, setPage] = useState<StudentPage>(() => (api.getParticipantToken() ? 'loading' : 'join'))
   const [session, setSession] = useState<StudentSession | null>(null)
   const [joinClass, setJoinClass] = useState('')
@@ -53,7 +54,7 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [showSubmit, setShowSubmit] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [tabWarning, setTabWarning] = useState(false)
+  const [tabWarning, setTabWarning] = useState<'TAB_HIDDEN' | 'DEVTOOLS_OPEN' | null>(null)
   const [result, setResult] = useState<SubmissionResult | null>(null)
   const submittingRef = useRef(false)
   const textsRef = useRef(texts)
@@ -80,7 +81,7 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
     setAnswers({})
     setTexts({})
     setResult(null)
-    setTabWarning(false)
+    setTabWarning(null)
     setShowSubmit(false)
     setPage('join')
   }
@@ -113,7 +114,7 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
       setDeadline(Date.now() + current.secondsRemaining * 1000)
       setSecondsLeft(current.secondsRemaining)
       setSaveState('idle')
-      setTabWarning(false)
+      setTabWarning(null)
       setSession((prev) => prev && { ...prev, status: 'in_progress' })
       setPage('exam')
     } catch (err: any) {
@@ -254,22 +255,31 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
     return () => window.clearInterval(timer)
   }, [page, deadline])
 
+  // Ghi nhận vi phạm trong giờ thi và gửi tới giáo viên giám sát
+  const reportViolation = (eventType: 'TAB_HIDDEN' | 'DEVTOOLS_OPEN') => {
+    setTabWarning(eventType)
+    api
+      .sendProctoringEvent(eventType, { timestamp: Date.now(), userAgent: navigator.userAgent })
+      .then((res) => {
+        if (res.tabWarnings !== undefined) setSession((prev) => prev && { ...prev, tabWarnings: res.tabWarnings! })
+      })
+      .catch(() => undefined)
+  }
+
   // Giám sát chuyển tab trong khi làm bài
   useEffect(() => {
     if (page !== 'exam') return
     const onVisibilityChange = () => {
-      if (document.visibilityState !== 'hidden') return
-      setTabWarning(true)
-      api
-        .sendProctoringEvent('TAB_HIDDEN', { timestamp: Date.now(), userAgent: navigator.userAgent })
-        .then((res) => {
-          if (res.tabWarnings !== undefined) setSession((prev) => prev && { ...prev, tabWarnings: res.tabWarnings! })
-        })
-        .catch(() => undefined)
+      if (document.visibilityState === 'hidden') reportViolation('TAB_HIDDEN')
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
   }, [page])
+
+  // Mỗi lần mở công cụ nhà phát triển (F12) trong giờ thi tính là một lượt cảnh báo
+  useEffect(() => {
+    if (page === 'exam' && devtoolsOpen) reportViolation('DEVTOOLS_OPEN')
+  }, [page, devtoolsOpen])
 
   const joinRoom = async () => {
     setJoinError('')
@@ -539,7 +549,7 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
                 )}
                 <div>
                   <strong>{session.tabWarnings}</strong>
-                  <span>Lượt rời trang</span>
+                  <span>Lượt cảnh báo</span>
                 </div>
               </div>
               <p className="muted small-text">
@@ -605,10 +615,14 @@ export function StudentPortal({ user, notify, onPageChange }: Props) {
         <div className="warning-banner">
           <ShieldAlert size={19} />
           <div>
-            <strong>Đã ghi nhận sự kiện rời trang</strong>
-            <p>Hệ thống ghi nhận trang thi bị ẩn. Sự kiện này được gửi tới giáo viên giám sát.</p>
+            <strong>{tabWarning === 'DEVTOOLS_OPEN' ? 'Đã ghi nhận việc mở công cụ nhà phát triển' : 'Đã ghi nhận sự kiện rời trang'}</strong>
+            <p>
+              {tabWarning === 'DEVTOOLS_OPEN'
+                ? 'Hệ thống phát hiện F12 / DevTools được mở trong giờ thi. Sự kiện này được gửi tới giáo viên giám sát.'
+                : 'Hệ thống ghi nhận trang thi bị ẩn. Sự kiện này được gửi tới giáo viên giám sát.'}
+            </p>
           </div>
-          <button onClick={() => setTabWarning(false)}>
+          <button onClick={() => setTabWarning(null)}>
             <X size={17} />
           </button>
         </div>
