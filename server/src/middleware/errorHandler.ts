@@ -30,6 +30,19 @@ export function errorHandler(
     })
   }
 
+  // Lỗi từ bộ đọc body của Express (tệp hoặc JSON quá lớn, JSON hỏng)
+  const bodyError = err as { type?: string; status?: number; limit?: number }
+  if (bodyError?.type === 'entity.too.large') {
+    const mb = bodyError.limit ? Math.round(bodyError.limit / 1024 / 1024) : 0
+    return res.status(413).json({
+      error: 'PAYLOAD_TOO_LARGE',
+      message: mb >= 1 ? `Tệp hoặc dữ liệu gửi lên vượt quá ${mb} MB.` : 'Dữ liệu gửi lên quá lớn.',
+    })
+  }
+  if (bodyError?.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'INVALID_JSON', message: 'Dữ liệu gửi lên không đúng định dạng JSON.' })
+  }
+
   if (err instanceof ZodError) {
     return res.status(400).json({
       error: 'VALIDATION_ERROR',

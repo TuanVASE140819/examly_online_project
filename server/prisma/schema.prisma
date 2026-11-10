@@ -240,6 +240,8 @@ model Assignment {
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   submissions     AssignmentSubmission[]
+  // Tệp đề bài (PDF, Word) giáo viên đính kèm
+  attachments     Attachment[]
 
   @@index([classId, createdAt])
   @@map("assignments")
@@ -257,10 +259,31 @@ model AssignmentSubmission {
   score        Float?
   feedback     String?
   gradedAt     DateTime?
+  // Tệp bài làm (PDF, Word) học sinh nộp kèm
+  attachments  Attachment[]
 
   @@unique([assignmentId, studentId])
   @@index([studentId])
   @@map("assignment_submissions")
+}
+
+// Tệp PDF / Word lưu thẳng trong cơ sở dữ liệu vì máy chủ (Render gói miễn phí) không có ổ đĩa lâu dài.
+// Thuộc về đúng một trong hai: đề bài tập (assignmentId) hoặc bài nộp của học sinh (submissionId).
+model Attachment {
+  id           String                @id @default(uuid()) @db.Uuid
+  assignmentId String?               @db.Uuid
+  assignment   Assignment?           @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  submissionId String?               @db.Uuid
+  submission   AssignmentSubmission? @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  fileName     String
+  mimeType     String
+  size         Int
+  data         Bytes
+  createdAt    DateTime              @default(now())
+
+  @@index([assignmentId])
+  @@index([submissionId])
+  @@map("attachments")
 }
 
 model AuditLog {

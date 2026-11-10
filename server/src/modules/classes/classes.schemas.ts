@@ -18,16 +18,19 @@ export const joinClassSchema = z.object({
 
 const dueAt = z.coerce.date({ invalid_type_error: 'Hạn nộp không hợp lệ' }).nullable().optional()
 
+// Yêu cầu bài tập có thể để trống khi đề nằm trong tệp PDF / Word đính kèm
+const instructions = z.string().trim().max(10000, 'Yêu cầu bài tập tối đa 10.000 ký tự')
+
 export const createAssignmentSchema = z.object({
   title: z.string().trim().min(3, 'Tiêu đề tối thiểu 3 ký tự').max(200),
-  instructions: z.string().trim().min(1, 'Hãy nhập yêu cầu bài tập').max(10000),
+  instructions: instructions.default(''),
   dueAt,
   maxScore: z.number().positive('Thang điểm phải lớn hơn 0').max(100).default(10),
 })
 
 export const updateAssignmentSchema = z.object({
   title: z.string().trim().min(3, 'Tiêu đề tối thiểu 3 ký tự').max(200).optional(),
-  instructions: z.string().trim().min(1, 'Hãy nhập yêu cầu bài tập').max(10000).optional(),
+  instructions: instructions.optional(),
   dueAt,
   maxScore: z.number().positive('Thang điểm phải lớn hơn 0').max(100).optional(),
 })
@@ -41,8 +44,9 @@ export const publishSchema = z.object({
   published: z.boolean(),
 })
 
+// Bài làm có thể chỉ gồm tệp đính kèm; service kiểm tra bài nộp không trống hoàn toàn
 export const submitAssignmentSchema = z.object({
-  content: z.string().trim().min(1, 'Bài làm không được để trống').max(20000, 'Bài làm tối đa 20.000 ký tự'),
+  content: z.string().trim().max(20000, 'Bài làm tối đa 20.000 ký tự').default(''),
 })
 
 export type ClassInput = z.infer<typeof classSchema>

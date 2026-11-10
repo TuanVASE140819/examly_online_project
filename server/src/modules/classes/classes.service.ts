@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto'
 import { Prisma, UserRole } from '@prisma/client'
 import { prisma } from '../../lib/prisma.js'
 import { AppError } from '../../middleware/errorHandler.js'
+import { attachmentList, MAX_ASSIGNMENT_FILES, type UploadedFile } from '../attachments/attachments.service.js'
 import type {
   AddMembersInput,
   ClassInput,
@@ -42,7 +43,12 @@ export function toClassSummary(c: ClassRow) {
   }
 }
 
-type AssignmentRow = Prisma.AssignmentGetPayload<{ include: { submissions: { select: { gradedAt: true } } } }>
+const teacherAssignmentInclude = {
+  submissions: { select: { gradedAt: true } },
+  attachments: attachmentList,
+} satisfies Prisma.AssignmentInclude
+
+type AssignmentRow = Prisma.AssignmentGetPayload<{ include: typeof teacherAssignmentInclude }>
 
 function toTeacherAssignment(a: AssignmentRow) {
   return {
@@ -57,6 +63,22 @@ function toTeacherAssignment(a: AssignmentRow) {
     createdAt: a.createdAt,
     submittedCount: a.submissions.length,
     gradedCount: a.submissions.filter((s) => s.gradedAt).length,
+    attachments: a.attachments,
+  }
+}
+
+const teacherSubmissionInclude = { attachments: attachmentList } satisfies Prisma.AssignmentSubmissionInclude
+
+type SubmissionRow = Prisma.AssignmentSubmissionGetPayload<{ include: typeof teacherSubmissionInclude }>
+
+function toTeacherSubmission(s: SubmissionRow) {
+  return {
+    content: s.content,
+    submittedAt: s.submittedAt,
+    score: s.score,
+    feedback: s.feedback,
+    gradedAt: s.gradedAt,
+    attachments: s.attachments,
   }
 }
 
@@ -138,7 +160,7 @@ export class ClassesService {
       }),
       prisma.assignment.findMany({
         where: { classId },
-        include: { submissions: { select: { gradedAt: true } } },
+        include: teacherAssignmentInclude,
         orderBy: { createdAt: 'desc' },
       }),
     ])
@@ -197,7 +219,7 @@ export class ClassesService {
         dueAt: data.dueAt ?? null,
         maxScore: data.maxScore,
       },
-      include: { submissions: { select: { gradedAt: true } } },
+      include: teacherAssignmentInclude,
     })
     return { assignment: toTeacherAssignment(assignment) }
   }
@@ -215,7 +237,7 @@ export class ClassesService {
     const assignment = await prisma.assignment.update({
       where: { id: assignmentId },
       data: { title: data.title, instructions: data.instructions, dueAt: data.dueAt, maxScore: data.maxScore },
-      include: { submissions: { select: { gradedAt: true } } },
+      include: teacherAssignmentInclude,
     })
     return { assignment: toTeacherAssignment(assignment) }
   }
@@ -229,28 +251,27 @@ export class ClassesService {
   // Danh sách học sinh của lớp kèm bài nộp (nếu có) để giáo viên chấm
   static async getAssignmentRoster(actor: Actor, assignmentId: string) {
     const assignment = await assertAssignmentAccess(actor, assignmentId)
-    const [members, submissions] = await Promise.all([
+    const [members, submissions, attachments] = await Promise.all([
       prisma.classMember.findMany({
         where: { classId: assignment.classId },
         include: { student: { select: { id: true, displayName: true, email: true } } },
         orderBy: { joinedAt: 'asc' },
       }),
-      prisma.assignmentSubmission.findMany({ where: { assignmentId } }),
+      prisma.assignmentSubmission.findMany({ where: { assignmentId }, include: teacherSubmissionInclude }),
+      prisma.attachment.findMany({ where: { assignmentId }, ...attachmentList }),
     ])
     const byStudent = new Map(submissions.map((s) => [s.studentId, s]))
 
     return {
       assignment: {
-        ...toTeacherAssignment({ ...assignment, submissions: submissions.map((s) => ({ gradedAt: s.gradedAt })) }),
+        ...toTeacherAssignment({ ...assignment, attachments, submissions: submissions.map((s) => ({ gradedAt: s.gradedAt })) }),
         className: assignment.classroom.name,
       },
       roster: members.map((m) => {
         const s = byStudent.get(m.student.id)
         return {
           student: { id: m.student.id, displayName: m.student.displayName, email: m.student.email },
-          submission: s
-            ? { content: s.content, submittedAt: s.submittedAt, score: s.score, feedback: s.feedback, gradedAt: s.gradedAt }
-            : null,
+          submission: s ? toTeacherSubmission(s) : null,
         }
       }),
     }
@@ -272,17 +293,10 @@ export class ClassesService {
     const updated = await prisma.assignmentSubmission.update({
       where: { id: submission.id },
       data: { score: roundScore(data.score), feedback: data.feedback || null, gradedAt: new Date() },
+      include: teacherSubmissionInclude,
     })
 
-    return {
-      submission: {
-        content: updated.content,
-        submittedAt: updated.submittedAt,
-        score: updated.score,
-        feedback: updated.feedback,
-        gradedAt: updated.gradedAt,
-      },
-    }
+    return { submission: toTeacherSubmission(updated) }
   }
 
   static async publishGrades(actor: Actor, assignmentId: string, published: boolean) {
@@ -290,8 +304,28 @@ export class ClassesService {
     const assignment = await prisma.assignment.update({
       where: { id: assignmentId },
       data: { gradesPublished: published, publishedAt: published ? new Date() : null },
-      include: { submissions: { select: { gradedAt: true } } },
+      include: teacherAssignmentInclude,
     })
     return { assignment: toTeacherAssignment(assignment) }
+  }
+
+  // Tệp đề bài (PDF / Word): mỗi yêu cầu tải lên một tệp
+  static async addAttachment(actor: Actor, assignmentId: string, file: UploadedFile) {
+    await assertAssignmentAccess(actor, assignmentId)
+    const count = await prisma.attachment.count({ where: { assignmentId } })
+    if (count >= MAX_ASSIGNMENT_FILES) {
+      throw new AppError(409, 'TOO_MANY_FILES', `Mỗi bài tập đính kèm tối đa ${MAX_ASSIGNMENT_FILES} tệp.`)
+    }
+    const attachment = await prisma.attachment.create({ data: { assignmentId, ...file }, select: attachmentList.select })
+    return { attachment }
+  }
+
+  static async removeAttachment(actor: Actor, assignmentId: string, attachmentId: string) {
+    await assertAssignmentAccess(actor, assignmentId)
+    const { count } = await prisma.attachment.deleteMany({ where: { id: attachmentId, assignmentId } })
+    if (!count) {
+      throw new AppError(404, 'ATTACHMENT_NOT_FOUND', 'Không tìm thấy tệp đính kèm của bài tập này.')
+    }
+    return { deleted: true }
   }
 }

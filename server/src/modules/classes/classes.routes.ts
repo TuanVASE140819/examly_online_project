@@ -4,6 +4,7 @@ import { requireAuth, requireRole, requireUserAccount } from '../../middleware/a
 import { validateBody } from '../../middleware/validate.js'
 import { handle, idParam } from '../../lib/http.js'
 import { ClassesService, type Actor } from './classes.service.js'
+import { rawFileBody, readUploadedFile } from '../attachments/attachments.service.js'
 import {
   addMembersSchema,
   classSchema,
@@ -74,4 +75,13 @@ classesRoutes.put(
 
 classesRoutes.post('/assignments/:assignmentId/publish', ...teacherAuth, validateBody(publishSchema), handle(async (req, res) => {
   res.json(await ClassesService.publishGrades(actor(req), idParam(req, 'assignmentId'), req.body.published))
+}))
+
+// Tệp đề bài: thân yêu cầu là nội dung tệp (nhị phân), tên tệp ở ?name=
+classesRoutes.post('/assignments/:assignmentId/attachments', ...teacherAuth, rawFileBody, handle(async (req, res) => {
+  res.status(201).json(await ClassesService.addAttachment(actor(req), idParam(req, 'assignmentId'), readUploadedFile(req)))
+}))
+
+classesRoutes.delete('/assignments/:assignmentId/attachments/:attachmentId', ...teacherAuth, handle(async (req, res) => {
+  res.json(await ClassesService.removeAttachment(actor(req), idParam(req, 'assignmentId'), idParam(req, 'attachmentId')))
 }))

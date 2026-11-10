@@ -2,10 +2,16 @@ import { ParticipantStatus, Prisma, UserRole } from '@prisma/client'
 import { prisma } from '../../lib/prisma.js'
 import { AppError } from '../../middleware/errorHandler.js'
 import { toClassSummary } from '../classes/classes.service.js'
+import { attachmentList, MAX_SUBMISSION_FILES, type UploadedFile } from '../attachments/attachments.service.js'
 
-type StudentAssignmentRow = Prisma.AssignmentGetPayload<{
-  include: { classroom: { select: { id: true; name: true } }; submissions: true }
-}>
+const studentAssignmentInclude = (studentId: string) =>
+  ({
+    classroom: { select: { id: true, name: true } },
+    attachments: attachmentList,
+    submissions: { where: { studentId }, include: { attachments: attachmentList } },
+  }) satisfies Prisma.AssignmentInclude
+
+type StudentAssignmentRow = Prisma.AssignmentGetPayload<{ include: ReturnType<typeof studentAssignmentInclude> }>
 
 // Điểm và nhận xét chỉ gửi cho học sinh khi giáo viên đã công bố
 function toStudentAssignment(a: StudentAssignmentRow) {
@@ -20,9 +26,11 @@ function toStudentAssignment(a: StudentAssignmentRow) {
     maxScore: a.maxScore,
     gradesPublished: a.gradesPublished,
     createdAt: a.createdAt,
+    attachments: a.attachments,
     submission: s
       ? {
           content: s.content,
+          attachments: s.attachments,
           submittedAt: s.submittedAt,
           late: Boolean(a.dueAt && s.submittedAt > a.dueAt),
           // Đã chấm thì khóa bài, kể cả khi điểm chưa công bố
@@ -44,6 +52,33 @@ async function assertStudent(userId: string) {
   if (account?.role !== UserRole.STUDENT) {
     throw new AppError(403, 'STUDENT_ACCOUNT_REQUIRED', 'Chức năng này dành cho tài khoản học sinh.')
   }
+}
+
+async function assertMemberAssignment(userId: string, assignmentId: string) {
+  const assignment = await prisma.assignment.findFirst({ where: { id: assignmentId, ...memberOf(userId) }, select: { id: true } })
+  if (!assignment) {
+    throw new AppError(404, 'ASSIGNMENT_NOT_FOUND', 'Không tìm thấy bài tập trong các lớp của bạn.')
+  }
+}
+
+// Bài nộp của chính học sinh; đã chấm thì khóa, không sửa chữ hay tệp được nữa
+async function findOwnSubmission(userId: string, assignmentId: string) {
+  const submission = await prisma.assignmentSubmission.findUnique({
+    where: { assignmentId_studentId: { assignmentId, studentId: userId } },
+    select: { id: true, content: true, gradedAt: true, _count: { select: { attachments: true } } },
+  })
+  if (submission?.gradedAt) {
+    throw new AppError(409, 'ALREADY_GRADED', 'Bài tập đã được giáo viên chấm nên không sửa được nữa.')
+  }
+  return submission
+}
+
+async function loadStudentAssignment(userId: string, assignmentId: string) {
+  const assignment = await prisma.assignment.findUniqueOrThrow({
+    where: { id: assignmentId },
+    include: studentAssignmentInclude(userId),
+  })
+  return toStudentAssignment(assignment)
 }
 
 export class StudentService {
@@ -86,25 +121,21 @@ export class StudentService {
   static async listMyAssignments(userId: string) {
     const assignments = await prisma.assignment.findMany({
       where: memberOf(userId),
-      include: { classroom: { select: { id: true, name: true } }, submissions: { where: { studentId: userId } } },
+      include: studentAssignmentInclude(userId),
       orderBy: [{ dueAt: { sort: 'asc', nulls: 'last' } }, { createdAt: 'desc' }],
     })
     return { assignments: assignments.map(toStudentAssignment) }
   }
 
+  // Nộp (hoặc sửa) phần chữ của bài làm. Bài làm có thể chỉ gồm tệp đính kèm,
+  // nhưng không được trống cả chữ lẫn tệp.
   static async submitAssignment(userId: string, assignmentId: string, content: string) {
     await assertStudent(userId)
-    const assignment = await prisma.assignment.findFirst({ where: { id: assignmentId, ...memberOf(userId) }, select: { id: true } })
-    if (!assignment) {
-      throw new AppError(404, 'ASSIGNMENT_NOT_FOUND', 'Không tìm thấy bài tập trong các lớp của bạn.')
-    }
+    await assertMemberAssignment(userId, assignmentId)
+    const existing = await findOwnSubmission(userId, assignmentId)
 
-    const existing = await prisma.assignmentSubmission.findUnique({
-      where: { assignmentId_studentId: { assignmentId, studentId: userId } },
-      select: { gradedAt: true },
-    })
-    if (existing?.gradedAt) {
-      throw new AppError(409, 'ALREADY_GRADED', 'Bài tập đã được giáo viên chấm nên không sửa được nữa.')
+    if (!content && !existing?._count.attachments) {
+      throw new AppError(400, 'EMPTY_SUBMISSION', 'Hãy nhập bài làm hoặc đính kèm tệp PDF / Word.')
     }
 
     await prisma.assignmentSubmission.upsert({
@@ -113,11 +144,49 @@ export class StudentService {
       update: { content, submittedAt: new Date() },
     })
 
-    const updated = await prisma.assignment.findUniqueOrThrow({
-      where: { id: assignmentId },
-      include: { classroom: { select: { id: true, name: true } }, submissions: { where: { studentId: userId } } },
+    return { assignment: await loadStudentAssignment(userId, assignmentId) }
+  }
+
+  // Đính kèm một tệp bài làm; chưa có bài nộp thì tạo bài nộp mới (tính là đã nộp)
+  static async addSubmissionFile(userId: string, assignmentId: string, file: UploadedFile) {
+    await assertStudent(userId)
+    await assertMemberAssignment(userId, assignmentId)
+    const existing = await findOwnSubmission(userId, assignmentId)
+    if ((existing?._count.attachments ?? 0) >= MAX_SUBMISSION_FILES) {
+      throw new AppError(409, 'TOO_MANY_FILES', `Mỗi bài nộp đính kèm tối đa ${MAX_SUBMISSION_FILES} tệp.`)
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const submission = await tx.assignmentSubmission.upsert({
+        where: { assignmentId_studentId: { assignmentId, studentId: userId } },
+        create: { assignmentId, studentId: userId, content: '' },
+        update: { submittedAt: new Date() },
+        select: { id: true },
+      })
+      await tx.attachment.create({ data: { submissionId: submission.id, ...file }, select: { id: true } })
     })
-    return { assignment: toStudentAssignment(updated) }
+
+    return { assignment: await loadStudentAssignment(userId, assignmentId) }
+  }
+
+  static async removeSubmissionFile(userId: string, assignmentId: string, attachmentId: string) {
+    await assertStudent(userId)
+    await assertMemberAssignment(userId, assignmentId)
+    const existing = await findOwnSubmission(userId, assignmentId)
+    if (!existing) {
+      throw new AppError(404, 'ATTACHMENT_NOT_FOUND', 'Không tìm thấy tệp trong bài nộp của bạn.')
+    }
+
+    const { count } = await prisma.attachment.deleteMany({ where: { id: attachmentId, submissionId: existing.id } })
+    if (!count) {
+      throw new AppError(404, 'ATTACHMENT_NOT_FOUND', 'Không tìm thấy tệp trong bài nộp của bạn.')
+    }
+    // Gỡ tệp cuối cùng của bài nộp không có phần chữ: coi như rút bài nộp
+    if (!existing.content && existing._count.attachments <= 1) {
+      await prisma.assignmentSubmission.delete({ where: { id: existing.id } })
+    }
+
+    return { assignment: await loadStudentAssignment(userId, assignmentId) }
   }
 
   // Bảng điểm: bài kiểm tra (phòng thi đã tham gia) và bài tập về nhà.

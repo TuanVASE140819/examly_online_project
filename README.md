@@ -133,8 +133,10 @@ Email đã có tài khoản thì được nâng lên quản trị viên. Sau đ�
 
 ### Lớp học và bài tập về nhà
 
-- **Giáo viên** (mục **Lớp học & bài tập**): tạo lớp (hệ thống cấp mã lớp dạng `LOP-AB12CD`), thêm học sinh bằng email tài khoản hoặc gửi mã lớp để học sinh tự vào. Giao bài tập cho cả lớp (yêu cầu, hạn nộp, thang điểm), chấm từng bài kèm nhận xét, rồi bấm **Công bố điểm**.
-- **Học sinh**: nhập mã lớp để vào lớp, làm và nộp bài tập dạng văn bản (có thể dán đường dẫn tài liệu). Sửa được bài cho tới khi giáo viên chấm; nộp sau hạn vẫn được nhận nhưng ghi là *nộp muộn*.
+- **Giáo viên** (mục **Lớp học & bài tập**): tạo lớp (hệ thống cấp mã lớp dạng `LOP-AB12CD`), thêm học sinh bằng email tài khoản hoặc gửi mã lớp để học sinh tự vào. Giao bài tập cho cả lớp: đề bài gõ trực tiếp và/hoặc **đính kèm tệp đề PDF, Word** (tối đa 5 tệp), hạn nộp, thang điểm. Chấm từng bài kèm nhận xét (nút **Lưu & chấm bài tiếp** chuyển sang bài chờ chấm kế tiếp), rồi bấm **Công bố điểm**.
+- **Học sinh**: nhập mã lớp để vào lớp, xem đề (bấm vào tệp để xem trước ngay trên trang), làm bài bằng cách gõ trực tiếp và/hoặc **nộp tệp PDF, Word** (tối đa 3 tệp). Sửa được bài cho tới khi giáo viên chấm; nộp sau hạn vẫn được nhận nhưng ghi là *nộp muộn*.
+
+Tệp đính kèm nhận `.pdf`, `.doc`, `.docx`, tối đa 10 MB mỗi tệp. Máy chủ kiểm tra cả đuôi tệp lẫn nội dung (tệp đổi đuôi bị từ chối) và lưu tệp trong PostgreSQL (bảng `attachments`), vì Render gói miễn phí không có ổ đĩa lâu dài. Lưu ý dung lượng gói Neon miễn phí (0,5 GB): một lớp 40 học sinh, mỗi em nộp tệp 2 MB, tốn khoảng 80 MB cho một bài tập. Xem trước: PDF mở bằng trình xem PDF của trình duyệt, `.docx` được chuyển sang HTML ngay trên trình duyệt (bố cục, công thức có thể khác bản gốc), `.doc` chỉ tải về được.
 
 ### Công bố điểm
 

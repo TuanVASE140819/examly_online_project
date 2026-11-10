@@ -67,3 +67,23 @@ export const isOverdue = (dueAt: string | null | undefined) => Boolean(dueAt && 
 
 export const formatScore = (score: number | null | undefined) =>
   score === null || score === undefined ? '—' : Number.isInteger(score) ? String(score) : score.toFixed(1)
+
+// Thời hạn còn lại của bài tập: "Còn 3 ngày", "Còn 5 giờ", "Quá hạn 2 ngày"
+export function dueInfo(dueAt: string | null | undefined): { text: string; tone: 'none' | 'ok' | 'soon' | 'overdue' } {
+  if (!dueAt) return { text: 'Không có hạn nộp', tone: 'none' }
+  const diff = Date.parse(dueAt) - Date.now()
+  const abs = Math.abs(diff)
+  const HOUR = 3_600_000
+  const span =
+    abs < HOUR ? `${Math.max(1, Math.round(abs / 60_000))} phút` : abs < 48 * HOUR ? `${Math.round(abs / HOUR)} giờ` : `${Math.round(abs / (24 * HOUR))} ngày`
+  if (diff < 0) return { text: `Quá hạn ${span}`, tone: 'overdue' }
+  return { text: `Còn ${span}`, tone: diff < 48 * HOUR ? 'soon' : 'ok' }
+}
+
+// Màu nhận diện cố định cho mỗi lớp học (theo mã lớp)
+const ACCENTS = ['indigo', 'teal', 'amber', 'rose', 'violet', 'sky'] as const
+export const classAccent = (id: string) => {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0
+  return `accent-${ACCENTS[hash % ACCENTS.length]}`
+}

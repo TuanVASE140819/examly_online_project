@@ -6,6 +6,7 @@ import { joinLimiter } from '../../middleware/rateLimiter.js'
 import { handle, idParam } from '../../lib/http.js'
 import { joinClassSchema, submitAssignmentSchema } from '../classes/classes.schemas.js'
 import { StudentService } from './student.service.js'
+import { rawFileBody, readUploadedFile } from '../attachments/attachments.service.js'
 
 // Học sinh: lớp học, bài tập về nhà và bảng điểm (theo tài khoản, không theo phiên thi)
 export const studentRoutes = Router()
@@ -26,6 +27,15 @@ studentRoutes.get('/me/assignments', handle(async (req, res) => {
 
 studentRoutes.put('/me/assignments/:assignmentId/submission', validateBody(submitAssignmentSchema), handle(async (req, res) => {
   res.json(await StudentService.submitAssignment(req.user!.sub, idParam(req, 'assignmentId'), req.body.content))
+}))
+
+// Tệp bài làm (PDF / Word): thân yêu cầu là nội dung tệp, tên tệp ở ?name=
+studentRoutes.post('/me/assignments/:assignmentId/submission/files', rawFileBody, handle(async (req, res) => {
+  res.status(201).json(await StudentService.addSubmissionFile(req.user!.sub, idParam(req, 'assignmentId'), readUploadedFile(req)))
+}))
+
+studentRoutes.delete('/me/assignments/:assignmentId/submission/files/:attachmentId', handle(async (req, res) => {
+  res.json(await StudentService.removeSubmissionFile(req.user!.sub, idParam(req, 'assignmentId'), idParam(req, 'attachmentId')))
 }))
 
 studentRoutes.get('/me/grades', handle(async (req, res) => {

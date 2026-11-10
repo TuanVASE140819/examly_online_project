@@ -164,6 +164,15 @@ export interface ClassMemberItem {
   joinedAt: string
 }
 
+// Tệp PDF / Word đính kèm đề bài hoặc bài làm (nội dung tệp tải riêng qua api.downloadAttachment)
+export interface AttachmentMeta {
+  id: string
+  fileName: string
+  mimeType: string
+  size: number
+  createdAt: string
+}
+
 export interface TeacherAssignment {
   id: string
   classId: string
@@ -176,6 +185,7 @@ export interface TeacherAssignment {
   createdAt: string
   submittedCount: number
   gradedCount: number
+  attachments: AttachmentMeta[]
 }
 
 export interface ClassDetail {
@@ -200,6 +210,7 @@ export interface AddMembersResult {
 
 export interface TeacherSubmission {
   content: string
+  attachments: AttachmentMeta[]
   submittedAt: string
   score: number | null
   feedback: string | null
@@ -226,8 +237,10 @@ export interface StudentAssignment {
   maxScore: number
   gradesPublished: boolean
   createdAt: string
+  attachments: AttachmentMeta[]
   submission: {
     content: string
+    attachments: AttachmentMeta[]
     submittedAt: string
     late: boolean
     // Giáo viên đã chấm nên không sửa được nữa

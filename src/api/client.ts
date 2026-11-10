@@ -4,6 +4,7 @@ import type {
   AdminUserList,
   AssignmentInput,
   AssignmentRoster,
+  AttachmentMeta,
   AuthUser,
   ClassDetail,
   ClassSummary,
@@ -159,6 +160,34 @@ class ApiClient {
     }
 
     return data as T
+  }
+
+  // Tải tệp lên dạng nhị phân thô (một tệp mỗi yêu cầu), tên tệp gửi qua ?name=
+  private async uploadFile<T>(endpoint: string, file: File): Promise<T> {
+    const sep = endpoint.includes('?') ? '&' : '?'
+    return this.request<T>(
+      `${endpoint}${sep}name=${encodeURIComponent(file.name)}`,
+      { method: 'POST', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } },
+      'user'
+    )
+  }
+
+  // Tệp đính kèm cần token đăng nhập nên không mở bằng đường dẫn trực tiếp được; tải về dạng Blob
+  async downloadAttachment(attachmentId: string): Promise<Blob> {
+    let res: Response
+    try {
+      res = await fetch(`${API_BASE}/attachments/${attachmentId}`, {
+        headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
+      })
+    } catch {
+      throw new ApiError('Không thể kết nối máy chủ để tải tệp.')
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => null)
+      if (res.status === 401) this.onUnauthorized?.()
+      throw new ApiError(data?.message || `Không tải được tệp (HTTP ${res.status})`, res.status, data?.error)
+    }
+    return res.blob()
   }
 
   // Health
@@ -467,6 +496,15 @@ class ApiClient {
     return res.submission
   }
 
+  async addAssignmentAttachment(assignmentId: string, file: File): Promise<AttachmentMeta> {
+    const res = await this.uploadFile<{ attachment: AttachmentMeta }>(`/assignments/${assignmentId}/attachments`, file)
+    return res.attachment
+  }
+
+  async removeAssignmentAttachment(assignmentId: string, attachmentId: string): Promise<void> {
+    await this.request(`/assignments/${assignmentId}/attachments/${attachmentId}`, { method: 'DELETE' }, 'user')
+  }
+
   async publishAssignmentGrades(assignmentId: string, published: boolean): Promise<TeacherAssignment> {
     const res = await this.request<{ assignment: TeacherAssignment }>(
       `/assignments/${assignmentId}/publish`,
@@ -495,6 +533,20 @@ class ApiClient {
     const res = await this.request<{ assignment: StudentAssignment }>(
       `/me/assignments/${assignmentId}/submission`,
       { method: 'PUT', body: JSON.stringify({ content }) },
+      'user'
+    )
+    return res.assignment
+  }
+
+  async addSubmissionFile(assignmentId: string, file: File): Promise<StudentAssignment> {
+    const res = await this.uploadFile<{ assignment: StudentAssignment }>(`/me/assignments/${assignmentId}/submission/files`, file)
+    return res.assignment
+  }
+
+  async removeSubmissionFile(assignmentId: string, attachmentId: string): Promise<StudentAssignment> {
+    const res = await this.request<{ assignment: StudentAssignment }>(
+      `/me/assignments/${assignmentId}/submission/files/${attachmentId}`,
+      { method: 'DELETE' },
       'user'
     )
     return res.assignment

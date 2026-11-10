@@ -13,6 +13,7 @@ import { proctoringRoutes } from './modules/proctoring/proctoring.routes.js'
 import { adminRoutes } from './modules/admin/admin.routes.js'
 import { classesRoutes } from './modules/classes/classes.routes.js'
 import { studentRoutes } from './modules/student/student.routes.js'
+import { attachmentsRoutes } from './modules/attachments/attachments.routes.js'
 
 export function createApp(): Express {
   const app = express()
@@ -54,6 +55,7 @@ export function createApp(): Express {
   app.use('/api/v1/admin', adminRoutes)
   app.use('/api/v1', classesRoutes)
   app.use('/api/v1', studentRoutes)
+  app.use('/api/v1', attachmentsRoutes)
 
   // Triển khai một dịch vụ (Render): phục vụ frontend đã build, mọi đường dẫn ngoài /api trả về index.html
   if (env.FRONTEND_DIST) {
