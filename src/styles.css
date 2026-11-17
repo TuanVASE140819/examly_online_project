@@ -30,6 +30,9 @@ html.lockdown img{-webkit-user-drag:none}
 @media print{html.lockdown body{display:none}}
 .devtools-guard{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:16px;background:#17233ccc;backdrop-filter:blur(14px)}
 .devtools-guard .center-card{max-width:440px;text-align:center}
+.exam-watermark{position:fixed;inset:0;z-index:15;pointer-events:none;background-repeat:repeat}
+.screen-guard{position:fixed;inset:0;z-index:28;display:grid;place-items:center;padding:16px;background:#17233cf2;backdrop-filter:blur(24px);cursor:pointer}
+.screen-guard .center-card{max-width:440px;text-align:center}
 .center-icon.danger{background:#fdeef0;color:var(--red)}
 /* ===== Lớp học & bài tập về nhà (giao diện mới, tệp PDF / Word) ===== */
 .accent-indigo{--accent:#526ef4;--accent-2:#7f92ff;--accent-soft:#edf1ff;--accent-ink:#3f57d6}

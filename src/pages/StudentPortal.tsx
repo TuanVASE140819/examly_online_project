@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   ArrowLeft,
@@ -18,9 +18,31 @@ import {
 import { api, toStudentStatus } from '../api/client'
 import { socketClient } from '../api/socket'
 import type { AuthUser, QuestionItem, StudentSession, SubmissionResult } from '../api/types'
+import { ExamlyLogo } from '../components/Logo'
+import { useScreenshotGuard, type ScreenshotMethod } from '../lib/lockdown'
 import { formatCountdown, formatPoints, formatScore, statusLabels } from '../lib/format'
 
 type StudentPage = 'loading' | 'join' | 'waiting' | 'exam' | 'result'
+
+type ViolationEvent = 'TAB_HIDDEN' | 'DEVTOOLS_OPEN' | 'SCREENSHOT_ATTEMPT'
+
+const violationText: Record<ViolationEvent, { title: string; detail: string }> = {
+  TAB_HIDDEN: { title: 'Đã ghi nhận sự kiện rời trang', detail: 'Hệ thống ghi nhận trang thi bị ẩn.' },
+  DEVTOOLS_OPEN: { title: 'Đã ghi nhận việc mở công cụ nhà phát triển', detail: 'Hệ thống phát hiện F12 / DevTools được mở trong giờ thi.' },
+  SCREENSHOT_ATTEMPT: { title: 'Đã ghi nhận thao tác chụp màn hình', detail: 'Không được chụp màn hình trong giờ thi.' },
+}
+
+const escapeXml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+
+// Nhãn chìm lặp lại tên, email và mã phòng của học sinh phủ lên đề thi:
+// ảnh chụp hay ảnh chụp bằng điện thoại bị lộ ra ngoài vẫn truy được người chụp.
+function watermarkImage(label: string) {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="340" height="190">` +
+    `<text x="170" y="95" text-anchor="middle" transform="rotate(-22 170 95)" fill="#17233c" fill-opacity="0.08" ` +
+    `font-family="Be Vietnam Pro, Segoe UI, sans-serif" font-size="13" font-weight="600">${escapeXml(label)}</text></svg>`
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
+}
 
 const pageLabels: Record<StudentPage, string> = {
   loading: 'Phòng thi',
@@ -54,7 +76,7 @@ export function StudentPortal({ user, notify, onPageChange, devtoolsOpen }: Prop
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [showSubmit, setShowSubmit] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [tabWarning, setTabWarning] = useState<'TAB_HIDDEN' | 'DEVTOOLS_OPEN' | null>(null)
+  const [tabWarning, setTabWarning] = useState<ViolationEvent | null>(null)
   const [result, setResult] = useState<SubmissionResult | null>(null)
   const submittingRef = useRef(false)
   const textsRef = useRef(texts)
@@ -256,10 +278,10 @@ export function StudentPortal({ user, notify, onPageChange, devtoolsOpen }: Prop
   }, [page, deadline])
 
   // Ghi nhận vi phạm trong giờ thi và gửi tới giáo viên giám sát
-  const reportViolation = (eventType: 'TAB_HIDDEN' | 'DEVTOOLS_OPEN') => {
+  const reportViolation = (eventType: ViolationEvent, extra?: Record<string, unknown>) => {
     setTabWarning(eventType)
     api
-      .sendProctoringEvent(eventType, { timestamp: Date.now(), userAgent: navigator.userAgent })
+      .sendProctoringEvent(eventType, { ...extra, timestamp: Date.now(), userAgent: navigator.userAgent })
       .then((res) => {
         if (res.tabWarnings !== undefined) setSession((prev) => prev && { ...prev, tabWarnings: res.tabWarnings! })
       })
@@ -280,6 +302,10 @@ export function StudentPortal({ user, notify, onPageChange, devtoolsOpen }: Prop
   useEffect(() => {
     if (page === 'exam' && devtoolsOpen) reportViolation('DEVTOOLS_OPEN')
   }, [page, devtoolsOpen])
+
+  // Chống chụp màn hình: che đề khi cửa sổ không được chọn, báo các lần bấm tổ hợp chụp màn hình
+  const screenCovered = useScreenshotGuard(page === 'exam', (method: ScreenshotMethod) => reportViolation('SCREENSHOT_ATTEMPT', { method }))
+  const watermark = useMemo(() => watermarkImage([user.displayName, user.email, session?.joinCode].filter(Boolean).join(' • ')), [user.displayName, user.email, session?.joinCode])
 
   const joinRoom = async () => {
     setJoinError('')
@@ -577,7 +603,7 @@ export function StudentPortal({ user, notify, onPageChange, devtoolsOpen }: Prop
       <div className="exam-header">
         <div className="exam-brand">
           <div className="brand-mark">
-            <BookOpenCheck size={20} />
+            <ExamlyLogo size={20} />
           </div>
           <div>
             <strong>{session.examTitle}</strong>
@@ -615,12 +641,8 @@ export function StudentPortal({ user, notify, onPageChange, devtoolsOpen }: Prop
         <div className="warning-banner">
           <ShieldAlert size={19} />
           <div>
-            <strong>{tabWarning === 'DEVTOOLS_OPEN' ? 'Đã ghi nhận việc mở công cụ nhà phát triển' : 'Đã ghi nhận sự kiện rời trang'}</strong>
-            <p>
-              {tabWarning === 'DEVTOOLS_OPEN'
-                ? 'Hệ thống phát hiện F12 / DevTools được mở trong giờ thi. Sự kiện này được gửi tới giáo viên giám sát.'
-                : 'Hệ thống ghi nhận trang thi bị ẩn. Sự kiện này được gửi tới giáo viên giám sát.'}
-            </p>
+            <strong>{violationText[tabWarning].title}</strong>
+            <p>{violationText[tabWarning].detail} Sự kiện này được gửi tới giáo viên giám sát.</p>
           </div>
           <button onClick={() => setTabWarning(null)}>
             <X size={17} />
@@ -716,8 +738,22 @@ export function StudentPortal({ user, notify, onPageChange, devtoolsOpen }: Prop
       )}
 
       <div className="exam-footnote">
-        <ShieldCheck size={15} /> CBRN-e Online Exam <span>•</span> Bài làm được lưu tự động lên máy chủ.
+        <ShieldCheck size={15} /> Examly Online Exam <span>•</span> Bài làm được lưu tự động lên máy chủ.
       </div>
+
+      <div className="exam-watermark" style={{ backgroundImage: watermark }} aria-hidden="true" />
+
+      {screenCovered && (
+        <div className="screen-guard" role="alertdialog" aria-modal="true" aria-labelledby="screen-guard-title" onClick={() => window.focus()}>
+          <div className="center-card">
+            <div className="center-icon">
+              <ShieldCheck size={26} />
+            </div>
+            <h2 id="screen-guard-title">Đề thi đang được ẩn</h2>
+            <p>Đề chỉ hiển thị khi cửa sổ thi đang được chọn và không có thao tác chụp màn hình. Bấm vào đây để tiếp tục làm bài.</p>
+          </div>
+        </div>
+      )}
 
       {showSubmit && (
         <div className="modal-backdrop">

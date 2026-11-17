@@ -398,7 +398,7 @@ class ApiClient {
     return res.submission
   }
 
-  async sendProctoringEvent(eventType: 'TAB_HIDDEN' | 'TAB_VISIBLE' | 'DEVTOOLS_OPEN', metadata?: Record<string, unknown>): Promise<{ tabWarnings?: number }> {
+  async sendProctoringEvent(eventType: 'TAB_HIDDEN' | 'TAB_VISIBLE' | 'DEVTOOLS_OPEN' | 'SCREENSHOT_ATTEMPT', metadata?: Record<string, unknown>): Promise<{ tabWarnings?: number }> {
     return this.request<{ tabWarnings?: number }>('/proctoring/events', {
       method: 'POST',
       body: JSON.stringify({ eventType, metadata }),

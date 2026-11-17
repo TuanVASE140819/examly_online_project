@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { BookOpenCheck, GraduationCap, LayoutDashboard, Lock, LogIn, Mail, ShieldAlert, ShieldCheck, UserPlus, UserRound } from 'lucide-react'
+import { GraduationCap, LayoutDashboard, Lock, LogIn, Mail, ShieldAlert, ShieldCheck, UserPlus, UserRound } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import type { AuthUser } from '../api/types'
+import { ExamlyLogo } from '../components/Logo'
 import { getGoogleIdToken, isGoogleSignInEnabled } from '../lib/firebase'
 
 type Mode = 'login' | 'register'
@@ -67,10 +68,10 @@ export function AuthScreen({ isLiveConnected, onAuthenticated }: { isLiveConnect
       <div className="join-card login-card">
         <div className="brand">
           <div className="brand-mark">
-            <BookOpenCheck size={22} />
+            <ExamlyLogo size={22} />
           </div>
           <div>
-            <strong>CBRN-e</strong>
+            <strong>Examly</strong>
             <span>LEARNING PLATFORM</span>
           </div>
         </div>

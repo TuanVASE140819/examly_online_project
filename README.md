@@ -1,4 +1,4 @@
-# CBRN-e — Hệ thống Thi Trực tuyến Thời gian thực (Full-stack)
+# Examly — Hệ thống Thi Trực tuyến Thời gian thực (Full-stack)
 
 Hệ thống thi trắc nghiệm trực tuyến toàn diện bao gồm **Frontend React + TypeScript + Vite**, **Backend Node.js + Express + TypeScript**, **Cơ sở dữ liệu PostgreSQL + Prisma ORM** và kênh giao tiếp thời gian thực **Socket.IO**.
 
@@ -90,7 +90,7 @@ Nút **Tiếp tục với Google** chỉ hiện khi đã cấu hình Firebase. F
 
 Cấu hình:
 1. Tạo project tại [console.firebase.google.com](https://console.firebase.google.com) → **Authentication → Sign-in method** → bật **Google**.
-2. **Authentication → Settings → Authorized domains:** thêm tên miền của trang (ví dụ `examly-online-project.vercel.app`; `localhost` có sẵn). Mở trang bằng IP trong mạng LAN thì thêm cả IP đó.
+2. **Authentication → Settings → Authorized domains:** thêm tên miền của trang (ví dụ `examly-edu.vercel.app`; `localhost` có sẵn). Mở trang bằng IP trong mạng LAN thì thêm cả IP đó.
 3. **Project settings → Your apps** → thêm Web app, chép cấu hình vào `.env` ở thư mục gốc (trên Vercel là Environment Variables, rồi build lại): `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`.
 4. Đặt `FIREBASE_PROJECT_ID` (trùng project ID ở trên) trong `server/.env` hoặc trên Render. Không cần service account.
 
@@ -156,6 +156,16 @@ Khi đăng nhập bằng tài khoản học sinh, trên mọi trang:
 
 Học sinh vẫn gõ, bôi đen, sao chép và dán được trong ô trả lời của chính mình. Giáo viên và quản trị viên không bị giới hạn.
 
+### Chống chụp màn hình (trong giờ thi)
+
+Không trang web nào chặn hẳn được việc chụp màn hình ở mức hệ điều hành (phím PrintScreen, Snipping Tool, phần mềm quay màn hình, chụp bằng điện thoại). Vì vậy trang làm bài dùng nhiều lớp để việc chụp khó hơn và dễ bị phát hiện:
+- **Che đề** khi cửa sổ thi không được chọn (chuyển sang ứng dụng khác, mở công cụ chụp, bấm sang màn hình khác) và ngay khi học sinh giữ phím Win/Cmd, bước đầu của Win+Shift+S và Cmd+Shift+3/4/5. Học sinh bấm vào màn hình che để làm bài tiếp.
+- Sau phím **PrintScreen**, đề bị che 2 giây và clipboard bị ghi đè để ảnh vừa chụp không dán ra được.
+- Bấm PrintScreen hoặc Win+Shift (Win+Shift+S) được tính là **một lượt cảnh báo** (`SCREENSHOT_ATTEMPT`) và giáo viên nhận được ngay.
+- **Nhãn chìm** gồm tên, email và mã phòng của học sinh phủ mờ lên đề, nên ảnh bị lộ ra ngoài (kể cả ảnh chụp bằng điện thoại) vẫn truy được người chụp.
+
+Trên Windows 11, phím PrintScreen mặc định mở Snipping Tool và chụp trước khi trang kịp che. Lần chụp đó vẫn bị báo cho giáo viên và ảnh vẫn mang nhãn chìm.
+
 Đây là lớp ngăn chặn phía trình duyệt: người rành kỹ thuật vẫn có thể vượt qua. Điều quan trọng hơn là đáp án đúng không bao giờ được gửi xuống máy học sinh, và điểm được chấm trên máy chủ.
 
 ---
@@ -176,7 +186,7 @@ Dự án bao gồm 48 kiểm thử, bao phủ các kịch bản:
 - Chống nộp bài nhiều lần (Idempotency).
 - Từ chối lưu bài khi kỳ thi đã hết giờ (TIMEOUT).
 - Chấm điểm nguyên tử server-side bằng Transaction ($transaction).
-- Giám sát chuyển tab và mở công cụ nhà phát triển (Proctoring event `TAB_HIDDEN`, `DEVTOOLS_OPEN`).
+- Giám sát chuyển tab, mở công cụ nhà phát triển và thao tác chụp màn hình (Proctoring event `TAB_HIDDEN`, `DEVTOOLS_OPEN`, `SCREENSHOT_ATTEMPT`).
 - Phải đăng nhập tài khoản học sinh mới tham gia được phòng thi; đăng ký không cho phép tự tạo tài khoản Admin.
 - Thí sinh chưa được duyệt hoặc kỳ thi chưa bắt đầu thì không nộp được bài.
 - Kết thúc kỳ thi (thủ công hoặc tự động khi hết giờ) sẽ tự nộp bài cho thí sinh đang làm và đánh dấu vắng thí sinh chưa vào thi.
@@ -208,7 +218,7 @@ npm test
    - Màn hình Học sinh hiện **Kỳ thi đã bắt đầu!** và nút **Vào làm bài thi**.
 5. **Làm bài & Giám sát:**
    - Mỗi lần chọn đáp án được **Autosave** lên máy chủ; tải lại trang (F5) vẫn quay về đúng bài với đáp án đã chọn.
-   - Chuyển tab, ẩn trình duyệt hoặc mở công cụ nhà phát triển (F12): số lượt cảnh báo cập nhật ngay trên màn hình Giáo viên.
+   - Chuyển tab, ẩn trình duyệt, mở công cụ nhà phát triển (F12) hoặc bấm phím chụp màn hình: số lượt cảnh báo cập nhật ngay trên màn hình Giáo viên.
    - Bấm **Nộp bài**: máy chủ chấm điểm và trả về kết quả chính thức; Giáo viên thấy điểm ngay trong bảng. Đề có câu tự luận thì bài hiện **Chờ chấm** cho tới khi giáo viên bấm **Chấm bài** và chấm xong.
 6. **Kết thúc:**
    - Giáo viên nhấn **Kết thúc kỳ thi**, hoặc máy chủ **tự động kết thúc khi hết giờ** (kể cả sau khi khởi động lại server).

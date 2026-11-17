@@ -3,7 +3,6 @@ import {
   ArrowRight,
   Award,
   Bell,
-  BookOpenCheck,
   CheckCircle2,
   CircleHelp,
   ClipboardList,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react'
 import { api } from './api/client'
 import { socketClient } from './api/socket'
+import { ExamlyLogo } from './components/Logo'
 import type { AuthUser } from './api/types'
 import { initials, roleLabels } from './lib/format'
 import { useStudentLockdown } from './lib/lockdown'
@@ -167,10 +167,10 @@ function App() {
           <aside className="sidebar">
             <div className="brand">
               <div className="brand-mark">
-                <BookOpenCheck size={22} />
+                <ExamlyLogo size={22} />
               </div>
               <div>
-                <strong>CBRN-e</strong>
+                <strong>Examly</strong>
                 <span>LEARNING PLATFORM</span>
               </div>
             </div>

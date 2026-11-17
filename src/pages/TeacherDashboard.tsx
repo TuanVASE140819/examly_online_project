@@ -199,7 +199,12 @@ export function TeacherDashboard({ user, isLiveConnected, notify, onPendingChang
     const onWarning = (w: { examId: string; participantId: string; displayName: string; eventType?: string; tabWarnings: number }) => {
       if (!isCurrent(w)) return
       setStudents((prev) => prev.map((s) => (s.id === w.participantId ? { ...s, tabWarnings: w.tabWarnings } : s)))
-      const action = w.eventType === 'DEVTOOLS_OPEN' ? 'mở công cụ nhà phát triển (F12)' : 'rời khỏi trang thi'
+      const action =
+        w.eventType === 'DEVTOOLS_OPEN'
+          ? 'mở công cụ nhà phát triển (F12)'
+          : w.eventType === 'SCREENSHOT_ATTEMPT'
+            ? 'bấm phím chụp màn hình'
+            : 'rời khỏi trang thi'
       log({ kind: 'warning', title: 'Cảnh báo giám sát', detail: `${w.displayName} ${action} (cảnh báo thứ ${w.tabWarnings})` })
     }
 

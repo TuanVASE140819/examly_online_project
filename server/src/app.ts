@@ -40,7 +40,7 @@ export function createApp(): Express {
   app.get('/api/v1/health', (_req, res) => {
     res.json({
       ok: true,
-      service: 'cbrn-e-api',
+      service: 'examly-api',
       timestamp: new Date().toISOString(),
     })
   })
